@@ -12,7 +12,7 @@ ThisBuild / mergifyStewardConfig ~= (_.map(_.withMergeMinors(true)))
 val http4sVersion = "0.23.30"
 val smithyVersion = "1.58.0"
 val circeVersion = "0.14.13"
-val cirisVersion = "3.5.0"
+val cirisVersion = "3.9.0"
 
 lazy val baseUri = settingKey[String](
   """Base URI of the backend, defaults to `""` (empty string)."""
