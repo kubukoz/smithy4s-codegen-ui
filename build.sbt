@@ -8,10 +8,13 @@ ThisBuild / scalaVersion := "2.13.16"
 ThisBuild / dynverSeparator := "-"
 
 ThisBuild / mergifyStewardConfig ~= (_.map(_.withMergeMinors(true)))
+ThisBuild / mergifySuccessConditions := List(
+  MergifyCondition.Custom("status-success=Build and Test")
+)
 
 val http4sVersion = "0.23.30"
-val smithyVersion = "1.58.0"
-val circeVersion = "0.14.14"
+val smithyVersion = "1.60.3"
+val circeVersion = "0.14.13"
 val cirisVersion = "3.5.0"
 
 lazy val baseUri = settingKey[String](
