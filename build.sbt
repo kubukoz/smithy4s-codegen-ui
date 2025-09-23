@@ -12,7 +12,7 @@ ThisBuild / mergifySuccessConditions := List(
   MergifyCondition.Custom("status-success=Build and Test")
 )
 
-val http4sVersion = "0.23.30"
+val http4sVersion = "0.23.31"
 val smithyVersion = "1.61.0"
 val circeVersion = "0.14.13"
 val cirisVersion = "3.10.0"
