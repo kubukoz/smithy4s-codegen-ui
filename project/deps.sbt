@@ -1,1 +1,1 @@
-libraryDependencies += "com.lihaoyi" %% "upickle" % "3.3.1"
+libraryDependencies += "com.lihaoyi" %% "upickle" % "4.4.2"
