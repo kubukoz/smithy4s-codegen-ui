@@ -78,8 +78,8 @@ object ModelLoader {
       smithyClasspathConfig: SmithyClasspathConfig
   ): IO[Map[String, List[java.net.URL]]] = {
     smithyClasspathConfig.entries.toList
-      .traverse { case (coordinate, jar) =>
-        smithyUrls(jar).tupleLeft(coordinate)
+      .traverse { case (name, entry) =>
+        smithyUrls(entry.file).map(urls => entry.artifactId -> urls)
       }
       .map(_.toMap)
   }

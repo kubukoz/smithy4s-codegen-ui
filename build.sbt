@@ -123,7 +123,11 @@ lazy val smithyClasspathSettings = Def.settings(
     SmithyClasspath.jsonConfig(
       smithyClasspathFile,
       entries.map(sce =>
-        sce.module -> s"$inDockerPath/$smithyClasspathValue/${sce.file.name}"
+        (
+          SmithyClasspath.entryName(sce.module),
+          sce.module,
+          s"$inDockerPath/$smithyClasspathValue/${sce.file.name}"
+        )
       )
     )
     Seq(
@@ -145,7 +149,13 @@ lazy val smithyClasspathSettings = Def.settings(
       target.value / smithyClasspathValue / "reStart" / "smithy-classpath.json"
     SmithyClasspath.jsonConfig(
       smithyClasspathFile,
-      entries.map(sce => sce.module -> sce.file.getAbsolutePath())
+      entries.map(sce =>
+        (
+          SmithyClasspath.entryName(sce.module),
+          sce.module,
+          sce.file.getAbsolutePath()
+        )
+      )
     )
     reStart.evaluated
   },
@@ -179,7 +189,8 @@ lazy val backend = (project in file("modules/backend"))
       "io.circe" %% "circe-parser" % circeVersion,
       "is.cir" %% "ciris" % cirisVersion,
       "software.amazon.smithy" % "smithy-model" % smithyVersion,
-      "org.http4s" %% "http4s-ember-server" % http4sVersion
+      "org.http4s" %% "http4s-ember-server" % http4sVersion,
+      "org.typelevel" %% "weaver-cats" % "0.11.3" % Test
     ),
     smithyClasspathDir := "smithy-classpath",
     smithyClasspath := Seq(

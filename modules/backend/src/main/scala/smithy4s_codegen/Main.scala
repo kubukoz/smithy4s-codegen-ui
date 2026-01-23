@@ -19,24 +19,29 @@ import java.nio.file.Paths
 import scala.concurrent.duration._
 
 class SmithyCodeGenerationServiceImpl(
-    deps: List[String],
+    depNameToArtifactId: Map[String, String],
     generator: Smithy4s,
     validator: Validate
 ) extends SmithyCodeGenerationService[IO] {
   private val defaultDeps = List.empty[String] // TODO
+  private val artifactIdToName = depNameToArtifactId.map(_.swap)
+
   def healthCheck(): IO[HealthCheckOutput] = IO.pure {
     HealthCheckOutput("ok")
   }
 
   def getConfiguration(): IO[GetConfigurationOutput] =
-    IO.pure(GetConfigurationOutput(deps.map(Dependency.apply)))
+    IO.pure(GetConfigurationOutput(depNameToArtifactId.values.toList.map(Dependency.apply)))
+
+  private def resolveDeps(deps: List[Dependency]): List[String] =
+    deps.flatMap(dep => artifactIdToName.get(dep.value))
 
   def smithy4sConvert(
       content: String,
       deps: Option[List[Dependency]]
   ): IO[Smithy4sConvertOutput] = {
     generator
-      .generate(deps.map(_.map(_.value)).getOrElse(defaultDeps), content)
+      .generate(deps.map(resolveDeps).getOrElse(defaultDeps), content)
       .leftMap(errors => InvalidSmithyContent(errors.map(_.getMessage)))
       .liftTo[IO]
       .map {
@@ -51,7 +56,7 @@ class SmithyCodeGenerationServiceImpl(
       deps: Option[List[Dependency]]
   ): IO[Unit] = {
     validator
-      .validateContent(deps.map(_.map(_.value)).getOrElse(defaultDeps), content)
+      .validateContent(deps.map(resolveDeps).getOrElse(defaultDeps), content)
       .flatMap {
         case Right(value) => IO.unit
         case Left(value)  => IO.raiseError(InvalidSmithyContent(value.toList))
@@ -65,10 +70,13 @@ object Routes {
       .eval(ModelLoader(config.smithyClasspathConfig))
       .map(ml => (new Validate(ml), new Smithy4s(ml)))
       .flatMap { case (validator, generator) =>
+        val depNameToArtifactId = config.smithyClasspathConfig.entries.view
+          .mapValues(_.artifactId)
+          .toMap
         SimpleRestJsonBuilder
           .routes(
             new SmithyCodeGenerationServiceImpl(
-              config.smithyClasspathConfig.entries.keySet.toList,
+              depNameToArtifactId,
               generator,
               validator
             )

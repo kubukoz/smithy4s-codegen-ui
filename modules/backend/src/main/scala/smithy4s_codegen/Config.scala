@@ -10,19 +10,31 @@ import io.circe._, io.circe.generic.semiauto._
 final class InvalidConfiguration(message: String)
     extends RuntimeException(message)
 
+final case class SmithyClasspathEntry(
+    artifactId: String,
+    file: FPath
+)
+
 final case class SmithyClasspathConfig(
-    entries: Map[String, FPath]
+    entries: Map[String, SmithyClasspathEntry]
 )
 object SmithyClasspathConfig {
   val Empty: SmithyClasspathConfig = SmithyClasspathConfig(Map.empty)
 }
 
+private final case class JsonSmithyClasspathEntry(
+    artifactId: String,
+    file: String
+)
+
 private final case class JsonSmithyClasspathConfig(
-    entries: Map[String, String]
+    entries: Map[String, JsonSmithyClasspathEntry]
 )
 
 private object JsonSmithyClasspathConfig {
-  implicit val decoder: Decoder[JsonSmithyClasspathConfig] =
+  implicit val entryDecoder: Decoder[JsonSmithyClasspathEntry] =
+    deriveDecoder[JsonSmithyClasspathEntry]
+  implicit val configDecoder: Decoder[JsonSmithyClasspathConfig] =
     deriveDecoder[JsonSmithyClasspathConfig]
 }
 
@@ -46,6 +58,8 @@ object Config {
   }
 
   private def loadSmithyClasspathConfig(path: FPath) = {
+    import JsonSmithyClasspathConfig.configDecoder
+
     Files[IO]
       .readUtf8(path)
       .compile
@@ -55,8 +69,10 @@ object Config {
       }
       .flatMap { jsonConfig =>
         jsonConfig.entries.toList
-          .traverse { case (dep, jar) =>
-            asFPath(jar).tupleLeft(dep)
+          .traverse { case (name, entry) =>
+            asFPath(entry.file).map { filePath =>
+              name -> SmithyClasspathEntry(entry.artifactId, filePath)
+            }
           }
           .map(_.toMap)
           .map(SmithyClasspathConfig.apply)

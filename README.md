@@ -30,10 +30,21 @@ The backend can be configured.
 ```json
 {
   "entries": {
-    "com.disneystreaming.alloy:alloy-core:0.2.8": "/opt/docker/smithy-classpath/alloy-core-0.2.8.jar"
+    "alloy-core": {
+      "artifactId": "com.disneystreaming.alloy:alloy-core:0.2.8",
+      "file": "/opt/docker/smithy-classpath/alloy-core-0.2.8.jar"
+    },
+    "smithy4s-protocol": {
+      "artifactId": "com.disneystreaming.smithy4s:smithy4s-protocol:0.18.46",
+      "file": "/opt/docker/smithy-classpath/smithy4s-protocol-0.18.46.jar"
+    }
   }
 }
 ```
+
+Each entry has a friendly name (the key) and contains:
+- `artifactId`: The full Maven coordinates (shown in the UI)
+- `file`: The path to the JAR file
 
 ### Frontend
 

@@ -17,10 +17,13 @@ final case class SmithyClasspathDockerEntry(
 object SmithyClasspath {
   def jsonConfig(
       target: File,
-      all: Seq[(ModuleID, String)]
+      all: Seq[(String, ModuleID, String)]
   ): Unit = {
-    val entries = all.map { case (module, location) =>
-      encodeModule(module) -> ujson.Str(location)
+    val entries = all.map { case (name, module, location) =>
+      name -> ujson.Obj(
+        "artifactId" -> ujson.Str(encodeModule(module)),
+        "file" -> ujson.Str(location)
+      )
     }.toMap
     val content = ujson.Obj(
       "entries" -> ujson.Obj.from(entries)
@@ -32,5 +35,9 @@ object SmithyClasspath {
     m.crossVersion match {
       case Disabled => s"${m.organization}:${m.name}:${m.revision}"
     }
+  }
+
+  def entryName(m: ModuleID): String = {
+    m.name
   }
 }
