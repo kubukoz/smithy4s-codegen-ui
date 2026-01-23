@@ -79,7 +79,7 @@ object ModelLoader {
   ): IO[Map[String, List[java.net.URL]]] = {
     smithyClasspathConfig.entries.toList
       .traverse { case (name, entry) =>
-        smithyUrls(entry.file).map(urls => entry.artifactId -> urls)
+        smithyUrls(entry.file).map(urls => name -> urls)
       }
       .map(_.toMap)
   }

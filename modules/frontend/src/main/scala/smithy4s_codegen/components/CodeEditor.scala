@@ -6,6 +6,7 @@ import smithy4s_codegen.api.Path
 import smithy4s_codegen.bindings.lzstring
 import smithy4s_codegen.api.Dependencies
 import smithy4s_codegen.api.Dependency
+import smithy4s_codegen.api.GetConfigurationOutput
 
 object CodeEditor {
   sealed trait ValidationResult
@@ -24,7 +25,9 @@ object CodeEditor {
     case class UnknownFailure(ex: Throwable) extends Smithy4sConversionResult
   }
 }
-class CodeEditor(dependencies: EventStream[Either[Throwable, Dependencies]]) {
+class CodeEditor(
+    config: EventStream[Either[Throwable, GetConfigurationOutput]]
+) {
   private val initial = """|$version: "2"
                            |
                            |namespace input
@@ -38,6 +41,9 @@ class CodeEditor(dependencies: EventStream[Either[Throwable, Dependencies]]) {
       .readOnce()
       .getOrElse(EditorContent(initial, Set.empty))
   )
+
+  // Store config as a Var for synchronous access
+  private val configVar = Var[Option[GetConfigurationOutput]](None)
 
   val updatePermalinkCode = {
     val v = onInput.mapToValue.map(value => editorContent.now().copy(value))
@@ -66,34 +72,36 @@ class CodeEditor(dependencies: EventStream[Either[Throwable, Dependencies]]) {
   }
 
   val dependenciesCheckboxes = {
-    def displayIfHasErrors = styleAttr <-- dependencies.map(res =>
+    def displayIfHasErrors = styleAttr <-- config.map(res =>
       if (res.isLeft) "display: block"
       else "display: none"
     )
     val errors = div(
       displayIfHasErrors,
-      child.text <-- dependencies.collect { case Left(ex) =>
+      child.text <-- config.collect { case Left(ex) =>
         "Unable to get available dependencies"
       }
     )
     val depsList = div(
-      children <-- dependencies.collect { case Right(deps) =>
+      children <-- config.collect { case Right(cfg) =>
+        val deps = cfg.entries.values.toList.map { entry =>
+          val dep = entry.artifactId
+          div(
+            input(
+              cls := "m-2",
+              `type` := "checkbox",
+              nameAttr := dep.value,
+              idAttr := dep.value,
+              updatePermalinkDeps(dep),
+              updateCheckFromPermalinkDeps(dep)
+            ),
+            label(forId := dep.value, dep.value, cls := "font-mono")
+          )
+        }
         List(
           fieldSet(
             legend("Choose your dependencies"),
-            deps.value.map { dep =>
-              div(
-                input(
-                  cls := "m-2",
-                  `type` := "checkbox",
-                  nameAttr := dep.value,
-                  idAttr := dep.value,
-                  updatePermalinkDeps(dep),
-                  updateCheckFromPermalinkDeps(dep)
-                ),
-                label(forId := dep.value, dep.value, cls := "font-mono")
-              )
-            }
+            deps
           )
         )
       }
@@ -103,14 +111,24 @@ class CodeEditor(dependencies: EventStream[Either[Throwable, Dependencies]]) {
 
   val sampleSelector = {
     val handleSampleChange = onChange.mapToValue --> { selectedName: String =>
-      Samples.all
-        .find(_.name == selectedName)
-        .foreach { sample =>
-          editorContent.update(_.copy(
-            code = sample.code,
-            deps = sample.deps.map(Dependency(_))
-          ))
+      configVar.now().foreach { cfg =>
+        // Build name to artifactId mapping
+        val nameToArtifactId = cfg.entries.map { case (name, entry) =>
+          name.value -> entry.artifactId.value
         }
+        Samples.all
+          .find(_.name == selectedName)
+          .foreach { sample =>
+            // Resolve sample dep names to artifact IDs
+            val resolvedDeps = sample.deps.flatMap(nameToArtifactId.get)
+            editorContent.set(
+              EditorContent(
+                code = sample.code,
+                deps = resolvedDeps.map(Dependency(_))
+              )
+            )
+          }
+      }
     }
 
     div(
@@ -135,6 +153,7 @@ class CodeEditor(dependencies: EventStream[Either[Throwable, Dependencies]]) {
   val component =
     div(
       cls := "grow overflow-auto",
+      config.collect { case Right(cfg) => Some(cfg) } --> configVar,
       sampleSelector,
       textArea(
         cls := "block p-2.5 w-full h-5/6 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 font-mono",

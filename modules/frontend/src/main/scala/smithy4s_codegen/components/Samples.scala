@@ -64,7 +64,7 @@ object Samples {
          |structure Person {
          |  @required email: EmailAddress
          |}""".stripMargin,
-      Set("com.disneystreaming.smithy4s:smithy4s-protocol:0.18.46")
+      Set("smithy4s-protocol")
     )
   )
 }

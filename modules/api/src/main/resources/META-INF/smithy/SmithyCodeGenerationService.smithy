@@ -29,7 +29,7 @@ operation HealthCheck {
 operation GetConfiguration {
     output := {
         @required
-        availableDependencies: Dependencies
+        entries: DependencyEntries
     }
 }
 
@@ -83,4 +83,17 @@ string Dependency
 
 list Dependencies {
     member: Dependency
+}
+
+string DependencyName
+
+structure DependencyEntry {
+    @required
+    artifactId: Dependency
+}
+
+/// Map from dependency name to entry
+map DependencyEntries {
+    key: DependencyName
+    value: DependencyEntry
 }

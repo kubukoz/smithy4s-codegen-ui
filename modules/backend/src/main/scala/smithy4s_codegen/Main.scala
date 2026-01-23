@@ -31,10 +31,19 @@ class SmithyCodeGenerationServiceImpl(
   }
 
   def getConfiguration(): IO[GetConfigurationOutput] =
-    IO.pure(GetConfigurationOutput(depNameToArtifactId.values.toList.map(Dependency.apply)))
+    IO.pure(
+      GetConfigurationOutput(
+        entries = depNameToArtifactId.map { case (name, artifactId) =>
+          DependencyName(name) -> DependencyEntry(Dependency(artifactId))
+        }
+      )
+    )
 
   private def resolveDeps(deps: List[Dependency]): List[String] =
-    deps.flatMap(dep => artifactIdToName.get(dep.value))
+    deps.flatMap { dep =>
+      // Frontend sends artifact IDs, we need to map them to names for model loading
+      artifactIdToName.get(dep.value)
+    }
 
   def smithy4sConvert(
       content: String,
