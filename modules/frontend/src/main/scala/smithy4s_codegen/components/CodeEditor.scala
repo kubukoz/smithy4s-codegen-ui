@@ -101,9 +101,41 @@ class CodeEditor(dependencies: EventStream[Either[Throwable, Dependencies]]) {
     div(errors, depsList)
   }
 
+  val sampleSelector = {
+    val handleSampleChange = onChange.mapToValue --> { selectedName: String =>
+      Samples.all
+        .find(_.name == selectedName)
+        .foreach { sample =>
+          editorContent.update(_.copy(
+            code = sample.code,
+            deps = sample.deps.map(Dependency(_))
+          ))
+        }
+    }
+
+    div(
+      cls := "mb-2",
+      label(
+        forId := "sample-selector",
+        "Load Sample: ",
+        cls := "mr-2 text-sm font-medium text-gray-900"
+      ),
+      select(
+        idAttr := "sample-selector",
+        cls := "bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2",
+        option(value := "", selected := true, "-- Select a sample --"),
+        Samples.all.map { sample =>
+          option(value := sample.name, sample.name)
+        },
+        handleSampleChange
+      )
+    )
+  }
+
   val component =
     div(
       cls := "grow overflow-auto",
+      sampleSelector,
       textArea(
         cls := "block p-2.5 w-full h-5/6 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 font-mono",
         onMountFocus,
