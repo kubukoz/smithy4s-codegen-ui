@@ -13,12 +13,13 @@ object Home {
       api: SmithyCodeGenerationService[EventStream],
       config: EventStream[Either[Throwable, GetConfigurationOutput]]
   ) = {
-    val editor =
-      new CodeEditor(config)
+    val editor = new CodeEditor(config)
     val viewer = new CodeViewer()
 
-    implicit val owner = new ManualOwner
-    editor.editorContent.signal.foreach(PermalinkCodec.write)
+    locally {
+      implicit val owner = new ManualOwner
+      editor.editorContent.signal.foreach(PermalinkCodec.write)
+    }
 
     val validate: EventStream[CodeEditor.ValidationResult] =
       editor.editorContent.signal
