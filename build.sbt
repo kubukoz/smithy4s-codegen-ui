@@ -4,7 +4,7 @@ import smithy4s_codegen._
 
 ThisBuild / organization := "com.example"
 ThisBuild / organizationName := "example"
-ThisBuild / scalaVersion := "2.13.16"
+ThisBuild / scalaVersion := "2.13.18"
 ThisBuild / dynverSeparator := "-"
 
 ThisBuild / mergifyStewardConfig ~= (_.map(_.withMergeMinors(true)))
