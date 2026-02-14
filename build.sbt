@@ -21,7 +21,7 @@ ThisBuild / githubWorkflowGenerate := {}
 val http4sVersion = "0.23.33"
 val smithyVersion = "1.67.0"
 val circeVersion = "0.14.15"
-val cirisVersion = "3.11.0"
+val cirisVersion = "3.11.1"
 
 lazy val baseUri = settingKey[String](
   """Base URI of the backend, defaults to `""` (empty string)."""
