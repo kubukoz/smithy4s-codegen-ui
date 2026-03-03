@@ -12,6 +12,7 @@ service SmithyCodeGenerationService {
         GetConfiguration
         SmithyValidate
         Smithy4sConvert
+        Smithy4sCompile
     ]
 }
 
@@ -35,12 +36,7 @@ operation GetConfiguration {
 
 @http(method: "POST", uri: "/smithy/validate", code: 200)
 operation SmithyValidate {
-    input := {
-        @required
-        content: String
-        @documentation("If omitted, use the server's default.")
-        deps: Dependencies
-    }
+    input := with [SmithyCodegenInput] {}
     errors: [InvalidSmithyContent]
 }
 
@@ -57,12 +53,7 @@ list ErrorMessages {
 
 @http(method: "POST", uri: "/smithy4s/convert", code: 200)
 operation Smithy4sConvert {
-    input := {
-        @required
-        content: String
-        @documentation("If omitted, use the server's default.")
-        deps: Dependencies
-    }
+    input := with [SmithyCodegenInput] {}
     output := {
         @required
         generated: Smithy4sGeneratedContent
@@ -77,6 +68,30 @@ string Content
 map Smithy4sGeneratedContent {
     key: Path
     value: Content
+}
+
+@http(method: "POST", uri: "/smithy4s/compile", code: 200)
+operation Smithy4sCompile {
+    input := with [SmithyCodegenInput] {}
+    output := {
+        @required
+        output: String
+    }
+    errors: [InvalidSmithyContent, CompileError]
+}
+
+@error("client")
+structure CompileError {
+    @required
+    errors: ErrorMessages
+}
+
+@mixin
+structure SmithyCodegenInput {
+    @required
+    content: String
+    @documentation("If omitted, use the server's default.")
+    deps: Dependencies
 }
 
 string Dependency

@@ -17,6 +17,15 @@ object CodeEditor {
     case class UnknownFailure(ex: Throwable) extends ValidationResult
   }
 
+  sealed trait CompileResult
+  object CompileResult {
+    case object NotStarted extends CompileResult
+    case object Loading extends CompileResult
+    case class Success(output: String) extends CompileResult
+    case class Failed(errors: List[String]) extends CompileResult
+    case class UnknownFailure(ex: Throwable) extends CompileResult
+  }
+
   sealed trait Smithy4sConversionResult
   object Smithy4sConversionResult {
     case object Loading extends Smithy4sConversionResult

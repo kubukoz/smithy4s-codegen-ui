@@ -180,16 +180,20 @@ lazy val backend = (project in file("modules/backend"))
   .enablePlugins(
     Smithy4sCodegenPlugin,
     JavaAppPackaging,
-    DockerPlugin
+    DockerPlugin,
+    BuildInfoPlugin
   )
   .settings(smithyClasspathSettings)
   .settings(
     name := "smithy4s-code-generation-backend",
+    buildInfoKeys := Seq[BuildInfoKey](smithy4sVersion),
+    buildInfoPackage := "smithy4s_codegen",
     fork := true,
     libraryDependencies ++= Seq(
       "com.disneystreaming.smithy4s" %% "smithy4s-http4s" % smithy4sVersion.value,
       "com.disneystreaming.smithy4s" %% "smithy4s-http4s-swagger" % smithy4sVersion.value,
       "com.disneystreaming.smithy4s" %% "smithy4s-codegen" % smithy4sVersion.value,
+      "org.virtuslab.scala-cli" % "cli_3" % "1.12.3",
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,

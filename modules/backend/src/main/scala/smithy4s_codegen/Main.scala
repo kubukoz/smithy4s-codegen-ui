@@ -10,6 +10,7 @@ import org.http4s.ember.server._
 import org.http4s.implicits._
 import smithy4s.http4s.SimpleRestJsonBuilder
 import smithy4s_codegen.api._
+import smithy4s_codegen.compilation._
 import smithy4s_codegen.generation._
 import smithy4s_codegen.smithy._
 
@@ -21,7 +22,8 @@ import scala.concurrent.duration._
 class SmithyCodeGenerationServiceImpl(
     depNameToArtifactId: Map[String, String],
     generator: Smithy4s,
-    validator: Validate
+    validator: Validate,
+    compiler: ScalaCliCompiler
 ) extends SmithyCodeGenerationService[IO] {
   private val defaultDeps = List.empty[String] // TODO
   private val artifactIdToName = depNameToArtifactId.map(_.swap)
@@ -71,6 +73,21 @@ class SmithyCodeGenerationServiceImpl(
         case Left(value)  => IO.raiseError(InvalidSmithyContent(value.toList))
       }
   }
+  def smithy4sCompile(
+      content: String,
+      deps: Option[List[Dependency]]
+  ): IO[Smithy4sCompileOutput] = {
+    compiler
+      .compile(
+        deps.map(resolveDeps).getOrElse(defaultDeps),
+        content,
+        BuildInfo.smithy4sVersion
+      )
+      .flatMap {
+        case Right(output) => IO.pure(Smithy4sCompileOutput(output))
+        case Left(errors)  => IO.raiseError(CompileError(errors))
+      }
+  }
 }
 
 object Routes {
@@ -79,18 +96,21 @@ object Routes {
       .eval(ModelLoader(config.smithyClasspathConfig))
       .map(ml => (new Validate(ml), new Smithy4s(ml)))
       .flatMap { case (validator, generator) =>
-        val depNameToArtifactId = config.smithyClasspathConfig.entries.view
-          .mapValues(_.artifactId)
-          .toMap
-        SimpleRestJsonBuilder
-          .routes(
-            new SmithyCodeGenerationServiceImpl(
-              depNameToArtifactId,
-              generator,
-              validator
+        Resource.eval(ScalaCliCompiler.make(generator)).flatMap { compiler =>
+          val depNameToArtifactId = config.smithyClasspathConfig.entries.view
+            .mapValues(_.artifactId)
+            .toMap
+          SimpleRestJsonBuilder
+            .routes(
+              new SmithyCodeGenerationServiceImpl(
+                depNameToArtifactId,
+                generator,
+                validator,
+                compiler
+              )
             )
-          )
-          .resource
+            .resource
+        }
       }
 
   private val docs: HttpRoutes[IO] =
