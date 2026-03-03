@@ -61,6 +61,7 @@ lazy val frontend = (project in file("modules/frontend"))
   .dependsOn(api)
   .settings(
     name := "smithy4s-code-generation-frontend",
+    scalaVersion := "3.3.3",
     cleanFiles ++= {
       val dir = baseDirectory.value
       Seq(dir / "dist", dir / "node_modules")
@@ -79,9 +80,8 @@ lazy val frontend = (project in file("modules/frontend"))
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-dom" % "2.8.1",
       "com.raquo" %%% "laminar" % "17.2.1",
-      "com.disneystreaming.smithy4s" %%% "smithy4s-http4s" % smithy4sVersion.value,
-      "org.http4s" %%% "http4s-dom" % "0.2.12",
-      "org.http4s" %%% "http4s-client" % http4sVersion
+      "tech.neander" %%% "smithy4s-fetch" % "0.0.4",
+      "org.typelevel" %%% "cats-effect" % "3.5.4"
     ),
     baseUri := {
       if (bundleAssets.value) ""
