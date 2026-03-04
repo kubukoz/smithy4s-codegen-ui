@@ -49,7 +49,7 @@ object ModelLoader {
     Resource
       .fromAutoCloseable(
         IO.delay(
-          FileSystems.newFileSystem(jar.toNioPath, null)
+          FileSystems.newFileSystem(jar.toNioPath, null: ClassLoader)
         )
       )
       .use { jarFS =>
