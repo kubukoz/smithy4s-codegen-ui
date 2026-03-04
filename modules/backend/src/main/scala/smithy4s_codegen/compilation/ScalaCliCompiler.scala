@@ -2,17 +2,12 @@ package smithy4s_codegen.compilation
 
 import cats.effect.IO
 import cats.effect.kernel.Resource
-import cats.effect.std.Mutex
 import smithy4s_codegen.generation.{CodegenResult, Smithy4s}
 
-import java.io.{ByteArrayOutputStream, PrintStream}
+import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
-import java.security.Permission
 
-private class ExitException(val code: Int)
-    extends SecurityException(s"exit $code")
-
-class ScalaCliCompiler private (generator: Smithy4s, mutex: Mutex[IO]) {
+class ScalaCliCompiler private (generator: Smithy4s) {
 
   def compile(
       dependencies: List[String],
@@ -44,51 +39,41 @@ class ScalaCliCompiler private (generator: Smithy4s, mutex: Mutex[IO]) {
       dir: Path,
       smithy4sVersion: String
   ): IO[Either[List[String], String]] =
-    mutex.lock.surround {
-      IO.blocking {
-        val output = new ByteArrayOutputStream()
-        val ps = new PrintStream(output, false, java.nio.charset.StandardCharsets.UTF_8)
-        val oldOut = System.out
-        val oldErr = System.err
-        val oldSm = System.getSecurityManager()
-        System.setOut(ps)
-        System.setErr(ps)
-        installNoExitSecurityManager()
-        val exitCode =
-          try {
-            scala.cli.ScalaCli.main(
-              Array(
-                "compile",
-                "--scala",
-                "2.13",
-                "--dep",
-                s"com.disneystreaming.smithy4s::smithy4s-core:$smithy4sVersion",
-                dir.toString
-              )
-            )
-            0
-          } catch {
-            case e: ExitException => e.code
-          } finally {
-            System.setOut(oldOut)
-            System.setErr(oldErr)
-            System.setSecurityManager(oldSm)
-            ps.close()
-          }
+    IO.blocking {
+      val javaExecutable = ProcessHandle.current().info().command().orElse("java")
+      val process = new ProcessBuilder(
+        java.util.Arrays.asList(
+          javaExecutable,
+          "-cp",
+          System.getProperty("java.class.path"),
+          "scala.cli.ScalaCli",
+          "compile",
+          "--scala",
+          "2.13",
+          "--dep",
+          s"com.disneystreaming.smithy4s::smithy4s-core:$smithy4sVersion",
+          dir.toString
+        )
+      ).redirectErrorStream(true)
+        .start()
 
-        val outputStr = stripAnsi(output.toString(java.nio.charset.StandardCharsets.UTF_8))
-        if (exitCode == 0) Right(outputStr)
-        else Left(List(outputStr))
-      }
+      // Drain the output stream in a separate thread to avoid deadlock when the
+      // subprocess fills the pipe buffer before completing.
+      var output = ""
+      val reader = new Thread(() =>
+        output = new String(
+          process.getInputStream.readAllBytes(),
+          StandardCharsets.UTF_8
+        )
+      )
+      reader.start()
+      val exitCode = process.waitFor()
+      reader.join()
+
+      val outputStr = stripAnsi(output)
+      if (exitCode == 0) Right(outputStr)
+      else Left(List(outputStr))
     }
-
-  @scala.annotation.nowarn("cat=deprecation")
-  private def installNoExitSecurityManager(): Unit =
-    System.setSecurityManager(new SecurityManager {
-      override def checkExit(status: Int): Unit = throw new ExitException(status)
-      override def checkPermission(perm: Permission): Unit = ()
-      override def checkPermission(perm: Permission, ctx: AnyRef): Unit = ()
-    })
 
   private def stripAnsi(s: String): String =
     s.replaceAll("\u001B\\[[;\\d]*[mGKHF]", "")
@@ -110,5 +95,5 @@ class ScalaCliCompiler private (generator: Smithy4s, mutex: Mutex[IO]) {
 
 object ScalaCliCompiler {
   def make(generator: Smithy4s): IO[ScalaCliCompiler] =
-    Mutex[IO].map(new ScalaCliCompiler(generator, _))
+    IO.pure(new ScalaCliCompiler(generator))
 }
