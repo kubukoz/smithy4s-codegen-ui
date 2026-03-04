@@ -22,6 +22,7 @@ val http4sVersion = "0.23.33"
 val smithyVersion = "1.68.0"
 val circeVersion = "0.14.15"
 val cirisVersion = "3.11.0"
+val scalaCliVersion = "1.12.3"
 
 lazy val baseUri = settingKey[String](
   """Base URI of the backend, defaults to `""` (empty string)."""
@@ -49,7 +50,7 @@ lazy val dockerTagOverride = settingKey[Option[String]](
 )
 
 lazy val root = (project in file("."))
-  .aggregate(api, frontend, backend)
+  .aggregate(api, frontend, backend, scalaCliDeps)
   .settings(
     addCommandAlias("ci", "mergifyCheck;test")
   )
@@ -185,7 +186,7 @@ lazy val backend = (project in file("modules/backend"))
   .settings(smithyClasspathSettings)
   .settings(
     name := "smithy4s-code-generation-backend",
-    buildInfoKeys := Seq[BuildInfoKey](smithy4sVersion),
+    buildInfoKeys := Seq[BuildInfoKey](smithy4sVersion, BuildInfoKey("scalaCliVersion", scalaCliVersion)),
     buildInfoPackage := "smithy4s_codegen",
     fork := true,
     libraryDependencies ++= Seq(
@@ -201,7 +202,7 @@ lazy val backend = (project in file("modules/backend"))
           "jsoniter-scala-core_3"
         ),
       "com.disneystreaming.smithy4s" %% "smithy4s-codegen" % smithy4sVersion.value,
-      "org.virtuslab.scala-cli" % "cli_3" % "1.12.3",
+      "org.virtuslab.scala-cli" %% "cli" % scalaCliVersion,
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
@@ -274,4 +275,12 @@ lazy val backend = (project in file("modules/backend"))
       }
     },
     dockerBaseImage := "eclipse-temurin:17.0.6_10-jre"
+  )
+
+// Fake module that exists solely so Scala Steward can track and update the
+// scala-cli dependency version. Not published.
+lazy val scalaCliDeps = (project in file("modules/scala-cli-deps"))
+  .settings(
+    publish / skip := true,
+    libraryDependencies += "org.virtuslab.scala-cli" %% "cli" % scalaCliVersion % Runtime
   )
