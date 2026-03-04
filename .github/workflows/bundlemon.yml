@@ -16,12 +16,11 @@ jobs:
         with:
           node-version: "17.6.0"
 
-      - name: Setup Java
-        uses: actions/setup-java@v3
+      - name: Setup Java and Scala
+        uses: coursier/setup-action@v1
         with:
-          distribution: temurin
-          java-version: 17
-          cache: sbt
+          jvm: temurin:1.17
+          apps: sbt
 
       - run: |
           npm install
