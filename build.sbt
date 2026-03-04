@@ -4,7 +4,7 @@ import smithy4s_codegen._
 
 ThisBuild / organization := "com.example"
 ThisBuild / organizationName := "example"
-ThisBuild / scalaVersion := "2.13.16"
+ThisBuild / scalaVersion := "3.8.2"
 ThisBuild / dynverSeparator := "-"
 
 ThisBuild / mergifyStewardConfig ~= (_.map(_.withMergeMinors(true)))
@@ -13,7 +13,7 @@ ThisBuild / mergifySuccessConditions := List(
 )
 
 ThisBuild / scalacOptions ++= Seq(
-  "-release:8"
+  "-release:17"
 )
 
 ThisBuild / githubWorkflowGenerate := {}
@@ -79,8 +79,7 @@ lazy val frontend = (project in file("modules/frontend"))
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-dom" % "2.8.1",
       "com.raquo" %%% "laminar" % "17.2.1",
-      "com.disneystreaming.smithy4s" %%% "smithy4s-http4s" % smithy4sVersion.value,
-      "org.http4s" %%% "http4s-dom" % "0.2.12",
+      "tech.neander" %%% "smithy4s-fetch" % "0.0.4",
       "org.http4s" %%% "http4s-client" % http4sVersion
     ),
     baseUri := {
@@ -187,8 +186,17 @@ lazy val backend = (project in file("modules/backend"))
     name := "smithy4s-code-generation-backend",
     fork := true,
     libraryDependencies ++= Seq(
-      "com.disneystreaming.smithy4s" %% "smithy4s-http4s" % smithy4sVersion.value,
-      "com.disneystreaming.smithy4s" %% "smithy4s-http4s-swagger" % smithy4sVersion.value,
+      // Conflicting Scala suffixes in jsoniter between this and codegen - we choose the 2.13 version and hope for the best
+      ("com.disneystreaming.smithy4s" %% "smithy4s-http4s" % smithy4sVersion.value)
+        .exclude(
+          "com.github.plokhotnyuk.jsoniter-scala",
+          "jsoniter-scala-core_3"
+        ),
+      ("com.disneystreaming.smithy4s" %% "smithy4s-http4s-swagger" % smithy4sVersion.value)
+        .exclude(
+          "com.github.plokhotnyuk.jsoniter-scala",
+          "jsoniter-scala-core_3"
+        ),
       "com.disneystreaming.smithy4s" %% "smithy4s-codegen" % smithy4sVersion.value,
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,

@@ -110,7 +110,7 @@ class CodeEditor(
   }
 
   val sampleSelector = {
-    val handleSampleChange = onChange.mapToValue --> { selectedName: String =>
+    val handleSampleChange = onChange.mapToValue --> { (selectedName: String) =>
       configVar.now().foreach { cfg =>
         // Build name to artifactId mapping
         val nameToArtifactId = cfg.entries.map { case (name, entry) =>
