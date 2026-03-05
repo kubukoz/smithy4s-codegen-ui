@@ -134,7 +134,10 @@ object Main extends IOApp.Simple {
         .withPort(thePort)
         .withHost(theHost)
         .withHttpApp(routes.orNotFound)
-        .withShutdownTimeout(5.seconds)
+        .withErrorHandler {
+          case e => IO.consoleForIO.printStackTrace(e) *> IO.raiseError(e)
+        }
+        .withShutdownTimeout(Duration.Zero)
         .build
     _ <- Resource.eval(IO.println(s"Server started on: $theHost:$thePort"))
   } yield res
