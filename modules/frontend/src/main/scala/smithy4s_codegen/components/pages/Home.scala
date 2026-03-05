@@ -8,7 +8,6 @@ import smithy4s_codegen.components.CodeEditor
 import smithy4s_codegen.components.CodeEditor.ValidationResult
 import smithy4s_codegen.components.CodeViewer
 import smithy4s_codegen.components.EditorContent
-import smithy4s_codegen.components.PermalinkCodec
 
 object Home {
   def apply(
@@ -20,7 +19,7 @@ object Home {
 
     locally {
       implicit val owner = new ManualOwner
-      editor.editorContent.signal.foreach(PermalinkCodec.write)
+      editor.editorContent.signal.foreach(editor.writePermalink)
     }
 
     val validate: EventStream[CodeEditor.ValidationResult] =

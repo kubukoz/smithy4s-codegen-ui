@@ -3,7 +3,6 @@ package smithy4s_codegen.components
 import com.raquo.laminar.api.L._
 import smithy4s_codegen.api.Content
 import smithy4s_codegen.api.Path
-import smithy4s_codegen.bindings.lzstring
 import smithy4s_codegen.api.Dependency
 import smithy4s_codegen.api.DependencyConfig
 import smithy4s_codegen.api.GetConfigurationOutput
@@ -88,14 +87,21 @@ class CodeEditor(
 
           // Per-dep version Var, initialized from current state or default
           val versionVar: Var[String] = Var(
-            editorContent.now().deps.get(dep).map(_.version).getOrElse(defaultVersion)
+            editorContent
+              .now()
+              .deps
+              .get(dep)
+              .map(_.version)
+              .getOrElse(defaultVersion)
           )
 
           // When version changes and dep is checked, update the dep config
           val updateVersion = versionVar.signal.changes --> { newVersion =>
             editorContent.update { content =>
               if (content.deps.contains(dep))
-                content.copy(deps = content.deps + (dep -> DependencyConfig(newVersion)))
+                content.copy(deps =
+                  content.deps + (dep -> DependencyConfig(newVersion))
+                )
               else content
             }
           }
@@ -103,7 +109,9 @@ class CodeEditor(
           val toggleDep = onChange.mapToChecked --> { isChecked =>
             editorContent.update { content =>
               if (isChecked)
-                content.copy(deps = content.deps + (dep -> DependencyConfig(versionVar.now())))
+                content.copy(deps =
+                  content.deps + (dep -> DependencyConfig(versionVar.now()))
+                )
               else
                 content.copy(deps = content.deps - dep)
             }
@@ -144,9 +152,18 @@ class CodeEditor(
             table(
               thead(
                 tr(
-                  th(cls := "pr-2 py-1 text-left text-xs text-gray-500 font-medium", ""),
-                  th(cls := "pr-4 py-1 text-left text-xs text-gray-500 font-medium", "Dependency"),
-                  th(cls := "py-1 text-left text-xs text-gray-500 font-medium", "Version")
+                  th(
+                    cls := "pr-2 py-1 text-left text-xs text-gray-500 font-medium",
+                    ""
+                  ),
+                  th(
+                    cls := "pr-4 py-1 text-left text-xs text-gray-500 font-medium",
+                    "Dependency"
+                  ),
+                  th(
+                    cls := "py-1 text-left text-xs text-gray-500 font-medium",
+                    "Version"
+                  )
                 )
               ),
               tbody(rows)
@@ -174,7 +191,9 @@ class CodeEditor(
               EditorContent(
                 code = sample.code,
                 deps = resolvedDeps.map { artifactId =>
-                  Dependency(artifactId) -> DependencyConfig(defaultVersionOf(artifactId))
+                  Dependency(artifactId) -> DependencyConfig(
+                    defaultVersionOf(artifactId)
+                  )
                 }.toMap
               )
             )
@@ -220,6 +239,15 @@ class CodeEditor(
       )
     )
 
+  def writePermalink(content: EditorContent): Unit =
+    org.scalajs.dom.window.location.hash = PermalinkCodec.encode(content)
+
+  val readPermalink: EventStream[EditorContent] =
+    windowEvents(_.onHashChange)
+      .mapTo(org.scalajs.dom.window.location.hash)
+      .map(PermalinkCodec.decode(_))
+      .collectSome
+
   def validationResult(
       validationResult: EventStream[CodeEditor.ValidationResult]
   ) = {
@@ -245,80 +273,7 @@ class CodeEditor(
 
 }
 
-final case class EditorContent(code: String, deps: Map[Dependency, DependencyConfig])
-
-/** Writes code to the URL hash and provides a stream of its decoded values.
-  *
-  * Encoding/decoding of code is handled internally.
-  */
-object PermalinkCodec {
-  val hashTag = "#"
-  val hashTagLength = hashTag.length()
-  val hashPart = ";"
-
-  def readOnce(): Option[EditorContent] =
-    decode(org.scalajs.dom.window.location.hash)
-
-  val read: EventStream[EditorContent] = windowEvents(_.onHashChange)
-    .mapTo(org.scalajs.dom.window.location.hash)
-    .map(decode(_))
-    .collectSome
-
-  def write(value: EditorContent): Unit =
-    org.scalajs.dom.window.location.hash = encode(value)
-
-  private class HashPartValue(partName: String) {
-    private val partKey = s"$partName="
-    def encode(value: String): String = s"$partKey$value"
-    def unapply(value: String): Option[String] = {
-      if (value.startsWith(partKey)) Some(value.drop(partKey.length()))
-      else None
-    }
-  }
-  private val codePart = new HashPartValue("code")
-  private val depsPart = new HashPartValue("dependencies")
-
-  // Encode deps as "artifactId|version" pairs joined by ","
-  // artifactIds may contain ":" so we use "|" as the key/version separator
-  private def encodeDeps(deps: Map[Dependency, DependencyConfig]): String =
-    deps.map { case (dep, cfg) => s"${dep.value}|${cfg.version}" }.mkString(",")
-
-  private def decodeDeps(s: String): Map[Dependency, DependencyConfig] =
-    s.split(",")
-      .filter(_.nonEmpty)
-      .flatMap { entry =>
-        entry.lastIndexOf('|') match {
-          case -1  => None
-          case idx =>
-            val artifactId = entry.take(idx)
-            val version = entry.drop(idx + 1)
-            Some(Dependency(artifactId) -> DependencyConfig(version))
-        }
-      }
-      .toMap
-
-  private def encode(value: EditorContent): String = {
-    val code =
-      codePart.encode(lzstring.compressToEncodedURIComponent(value.code))
-    val deps = depsPart.encode(encodeDeps(value.deps))
-    val hash = List(code, deps).mkString(";")
-    s"#$hash"
-  }
-
-  private def decode(hash: String): Option[EditorContent] = {
-    if (hash.startsWith(hashTag)) {
-      val hashParts = hash
-        .drop(hashTagLength)
-        .split(hashPart)
-
-      val maybeCode = hashParts.collectFirst { case codePart(value) =>
-        Option(lzstring.decompressFromEncodedURIComponent(value))
-      }.flatten
-      val deps =
-        hashParts
-          .collectFirst { case depsPart(value) => decodeDeps(value) }
-          .getOrElse(Map.empty)
-      maybeCode.map(code => EditorContent(code, deps))
-    } else None
-  }
-}
+final case class EditorContent(
+    code: String,
+    deps: Map[Dependency, DependencyConfig]
+)

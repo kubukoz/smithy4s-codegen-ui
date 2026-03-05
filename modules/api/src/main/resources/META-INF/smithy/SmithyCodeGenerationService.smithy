@@ -122,6 +122,15 @@ structure DependencyConfig {
     version: String
 }
 
+structure Permalink {
+    @required
+    version: Integer
+    @required
+    code: String
+    @required
+    deps: Dependencies
+}
+
 string DependencyName
 
 structure DependencyEntry {

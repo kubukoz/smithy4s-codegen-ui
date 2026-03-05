@@ -75,6 +75,17 @@ lazy val frontend = (project in file("modules/frontend"))
         )
       // .withSourceMap(true) -- enable for source-map-explorer
     },
+    Test / scalaJSLinkerConfig ~= {
+      _.withModuleKind(ModuleKind.CommonJSModule)
+        .withModuleSplitStyle(ModuleSplitStyle.FewestModules)
+    },
+    Test / jsEnv := {
+      val nodeModules = (ThisBuild / baseDirectory).value / "modules" / "frontend" / "node_modules"
+      new org.scalajs.jsenv.nodejs.NodeJSEnv(
+        org.scalajs.jsenv.nodejs.NodeJSEnv.Config()
+          .withEnv(Map("NODE_PATH" -> nodeModules.getAbsolutePath))
+      )
+    },
     /* Depend on the scalajs-dom library.
      * It provides static types for the browser DOM APIs.
      */
@@ -82,7 +93,9 @@ lazy val frontend = (project in file("modules/frontend"))
       "org.scala-js" %%% "scalajs-dom" % "2.8.1",
       "com.raquo" %%% "laminar" % "17.2.1",
       "tech.neander" %%% "smithy4s-fetch" % "0.0.4",
-      "org.http4s" %%% "http4s-client" % http4sVersion
+      "org.http4s" %%% "http4s-client" % http4sVersion,
+      "com.disneystreaming.smithy4s" %%% "smithy4s-json" % smithy4sVersion.value,
+      "org.typelevel" %%% "weaver-cats" % "0.11.3" % Test
     ),
     baseUri := {
       if (bundleAssets.value) ""
