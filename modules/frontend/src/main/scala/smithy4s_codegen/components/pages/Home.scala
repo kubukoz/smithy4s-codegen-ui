@@ -140,7 +140,7 @@ object Home {
                 ),
                 label(
                   cls := "text-sm text-gray-600",
-                  "Scala version: "
+                  "Scala version (compilation): "
                 ),
                 input(
                   cls := "px-2 py-2 border border-gray-300 rounded text-sm font-mono",
@@ -152,7 +152,7 @@ object Home {
                 ),
                 label(
                   cls := "text-sm text-gray-600",
-                  "Smithy4s version: "
+                  "Smithy4s version (compilation): "
                 ),
                 input(
                   cls := "px-2 py-2 border border-gray-300 rounded text-sm font-mono",
