@@ -10,7 +10,7 @@ import coursier.parse.DependencyParser
 import fs2.io.file.{Files, Path}
 import fs2.io.process.{ProcessBuilder => Fs2ProcessBuilder, Processes}
 import smithy4s_codegen.generation.CodegenResult
-import cats.effect.std.Supervisor
+import cats.effect.std.{Semaphore, Supervisor}
 import os.RelPath
 
 trait ScalaCliCompiler {
@@ -126,6 +126,17 @@ object ScalaCliCompiler {
       }
 
   extension (a: IO[ScalaCliCompiler]) {
+    def throttled(maxConcurrent: Int): IO[ScalaCliCompiler] =
+      (a, Semaphore[IO](maxConcurrent)).mapN { (compiler, sem) =>
+        new ScalaCliCompiler {
+          def compile(
+              files: List[(RelPath, CodegenResult)],
+              extraDeps: List[String]
+          ): IO[Either[List[String], String]] =
+            sem.permit.surround(compiler.compile(files, extraDeps))
+        }
+      }
+
     def supervised(using sup: Supervisor[IO]): IO[ScalaCliCompiler] =
       a.supervise(sup)
         .flatTap { f =>

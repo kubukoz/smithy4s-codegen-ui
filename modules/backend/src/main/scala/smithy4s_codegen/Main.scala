@@ -135,6 +135,7 @@ object Main extends IOApp.Simple {
     given Supervisor[IO] <- Supervisor[IO](await = false)
     compiler <- ScalaCliCompiler
       .make(smithy4s_codegen.BuildInfo.scalaCliVersion)
+      .throttled(10)
       .supervised
       .toResource
     routes <- Routes.route(config, compiler).map(Routes.fullRoutes)
