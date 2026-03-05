@@ -8,6 +8,13 @@ export default defineConfig({
       projectID: "frontend",
     }),
   ],
+  resolve: {
+    dedupe: [
+      "@codemirror/state",
+      "@codemirror/view",
+      "@codemirror/language",
+    ],
+  },
   server: {
     proxy: {
       // For requests to /api/**, drop the prefix and proxy the rest to the backend.

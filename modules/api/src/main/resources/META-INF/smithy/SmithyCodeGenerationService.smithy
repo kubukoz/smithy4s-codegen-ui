@@ -11,6 +11,7 @@ service SmithyCodeGenerationService {
         HealthCheck
         GetConfiguration
         SmithyValidate
+        // todo: rename to smithy4sGenerate
         Smithy4sConvert
     ]
 }
@@ -38,10 +39,14 @@ operation SmithyValidate {
     input := {
         @required
         content: String
+
         @documentation("If omitted, use the server's default.")
         deps: Dependencies
     }
-    errors: [InvalidSmithyContent]
+
+    errors: [
+        InvalidSmithyContent
+    ]
 }
 
 @error("client")
@@ -60,14 +65,19 @@ operation Smithy4sConvert {
     input := {
         @required
         content: String
+
         @documentation("If omitted, use the server's default.")
         deps: Dependencies
     }
+
     output := {
         @required
         generated: Smithy4sGeneratedContent
     }
-    errors: [InvalidSmithyContent]
+
+    errors: [
+        InvalidSmithyContent
+    ]
 }
 
 string Path

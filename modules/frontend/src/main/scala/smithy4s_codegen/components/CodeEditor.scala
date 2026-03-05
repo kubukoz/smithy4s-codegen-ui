@@ -45,9 +45,8 @@ class CodeEditor(
   // Store config as a Var for synchronous access
   private val configVar = Var[Option[GetConfigurationOutput]](None)
 
-  val updatePermalinkCode = {
-    val v = onInput.mapToValue.map(value => editorContent.now().copy(value))
-    v --> editorContent
+  val codeChangeObserver: Observer[String] = Observer { newCode =>
+    editorContent.update(_.copy(newCode))
   }
 
   val updateValueFromPermalinkCode =
@@ -152,19 +151,22 @@ class CodeEditor(
 
   val component =
     div(
-      cls := "grow overflow-auto",
+      cls := "grow overflow-hidden flex flex-col",
       config.collect { case Right(cfg) => Some(cfg) } --> configVar,
       sampleSelector,
-      textArea(
-        cls := "block p-2.5 w-full h-5/6 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 font-mono",
-        onMountFocus,
-        controlled(
-          updateValueFromPermalinkCode,
-          updatePermalinkCode
+      div(
+        cls := "grow overflow-hidden rounded-lg border border-gray-300",
+        CodeMirrorEditor(
+          contentSignal = editorContent.signal.map(_.code),
+          onChangeObserver = codeChangeObserver,
+          extraExtensions = Seq(
+            smithy4s_codegen.bindings.smithyLanguage,
+            smithy4s_codegen.bindings.smithyCompletion
+          )
         )
       ),
       div(
-        cls := "block p-2.5 w-full h-1/6",
+        cls := "shrink-0 p-2",
         dependenciesCheckboxes
       )
     )

@@ -5,3 +5,20 @@
 html, body {
     height: 100%;
 }
+
+/* CodeMirror editor fills its container */
+.cm-wrapper {
+    display: flex;
+    flex-direction: column;
+}
+
+.cm-wrapper .cm-editor {
+    flex: 1;
+    height: 100%;
+    overflow: hidden;
+}
+
+.cm-wrapper .cm-scroller {
+    overflow: auto;
+    height: 100%;
+}
