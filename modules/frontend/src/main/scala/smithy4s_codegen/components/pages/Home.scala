@@ -54,7 +54,12 @@ object Home {
 
     val compileClicked = new EventBus[Unit]
 
-    val scalaVersionVar: Var[String] = Var(smithy4s_codegen.BuildInfo.scalaVersion)
+    val scalaVersionVar: Var[String] = Var(
+      smithy4s_codegen.BuildInfo.scalaVersion
+    )
+    val smithy4sVersionVar: Var[String] = Var(
+      smithy4s_codegen.BuildInfo.smithy4sVersion
+    )
 
     val compileResult: EventStream[CodeEditor.CompileResult] =
       EventStream.merge(
@@ -62,9 +67,15 @@ object Home {
         compileClicked.events
           .withCurrentValueOf(editor.editorContent.signal)
           .withCurrentValueOf(scalaVersionVar.signal)
-          .flatMapSwitch { case ((content: EditorContent), scalaVersion: String) =>
+          .withCurrentValueOf(smithy4sVersionVar.signal)
+          .flatMapSwitch { (content, scalaVersion, smithy4sVersion) =>
             api
-              .smithy4sCompile(content.code, Some(content.deps), Some(scalaVersion))
+              .smithy4sCompile(
+                content.code,
+                Some(content.deps),
+                Some(scalaVersion),
+                Some(smithy4sVersion)
+              )
               .map(r => CodeEditor.CompileResult.Success(r.output))
               .recover {
                 case CompileError(errors) =>
@@ -113,7 +124,7 @@ object Home {
         validateResultErrors,
         child <-- hasGeneratedCode.signal.map {
           case false => emptyNode
-          case true =>
+          case true  =>
             div(
               cls := "mb-4",
               div(
@@ -138,6 +149,18 @@ object Home {
                     value <-- scalaVersionVar.signal,
                     onInput.mapToValue --> scalaVersionVar
                   )
+                ),
+                label(
+                  cls := "text-sm text-gray-600",
+                  "Smithy4s version: "
+                ),
+                input(
+                  cls := "px-2 py-2 border border-gray-300 rounded text-sm font-mono",
+                  typ := "text",
+                  controlled(
+                    value <-- smithy4sVersionVar.signal,
+                    onInput.mapToValue --> smithy4sVersionVar
+                  )
                 )
               ),
               div(
@@ -161,7 +184,10 @@ object Home {
                     )
                   case CodeEditor.CompileResult.Failed(errors) =>
                     div(
-                      p(cls := "text-red-600 font-semibold", "Compilation failed"),
+                      p(
+                        cls := "text-red-600 font-semibold",
+                        "Compilation failed"
+                      ),
                       pre(
                         cls := "mt-1 p-2 text-sm text-red-800 bg-red-50 border border-red-300 rounded overflow-x-auto",
                         errors.mkString("\n")

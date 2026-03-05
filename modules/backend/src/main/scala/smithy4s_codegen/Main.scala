@@ -79,7 +79,8 @@ class SmithyCodeGenerationServiceImpl(
   def smithy4sCompile(
       content: String,
       deps: Option[Map[Dependency, DependencyConfig]],
-      scalaVersion: Option[String]
+      scalaVersion: Option[String],
+      smithy4sVersion: Option[String]
   ): IO[Smithy4sCompileOutput] =
     IO.fromEither(
       generator
@@ -87,11 +88,13 @@ class SmithyCodeGenerationServiceImpl(
         .left
         .map(errors => CompileError(errors.map(_.getMessage)))
     ).flatMap { files =>
+      val resolvedSmithy4sVersion =
+        smithy4sVersion.getOrElse(smithy4s_codegen.BuildInfo.smithy4sVersion)
       compiler
         .compile(
           files,
           List(
-            s"com.disneystreaming.smithy4s::smithy4s-core:${smithy4s_codegen.BuildInfo.smithy4sVersion}"
+            s"com.disneystreaming.smithy4s::smithy4s-core:$resolvedSmithy4sVersion"
           ),
           scalaVersion.getOrElse(smithy4s_codegen.BuildInfo.scalaVersion)
         )

@@ -81,6 +81,9 @@ operation Smithy4sCompile {
     input := with [SmithyCodegenInput] {
         @documentation("Scala version to use for compilation. If omitted, uses the server's default.")
         scalaVersion: String
+
+        @documentation("Smithy4s version to use for compilation. If omitted, uses the server's default.")
+        smithy4sVersion: String
     }
 
     output := {
