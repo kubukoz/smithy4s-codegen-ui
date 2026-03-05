@@ -2,50 +2,50 @@ package smithy4s_codegen.compilation
 
 import cats.effect.IO
 import cats.effect.kernel.Resource
-import smithy4s_codegen.generation.{CodegenResult, Smithy4s}
+import coursier._
+import cats.syntax.all._
+import coursier.parse.DependencyParser
+import fs2.io.file.{Files, Path}
+import smithy4s_codegen.BuildInfo
+import smithy4s_codegen.generation.CodegenResult
 
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Path}
 
-class ScalaCliCompiler private (generator: Smithy4s) {
+class ScalaCliCompiler private (scalaCliClasspath: String) {
 
   def compile(
-      dependencies: List[String],
-      content: String,
-      smithy4sVersion: String
-  ): IO[Either[List[String], String]] =
-    IO.fromEither(
-      generator.generate(dependencies, content).left.map(_.map(_.getMessage))
-    ).flatMap(compileFiles(_, smithy4sVersion))
-
-  private def compileFiles(
       files: List[(os.RelPath, CodegenResult)],
       smithy4sVersion: String
   ): IO[Either[List[String], String]] =
-    withTempDir { dir =>
-      IO.blocking {
-        files.foreach { case (relPath, result) =>
-          val targetDir = dir.resolve(relPath.toString)
-          Files.createDirectories(targetDir)
-          Files.writeString(
-            targetDir.resolve(s"${result.name}.scala"),
-            result.content
-          )
+    tempDir.use { dir =>
+      files
+        .traverse_ { case (relPath, result) =>
+          val targetDir = dir / relPath.toString
+          Files[IO].createDirectories(targetDir) *>
+            fs2.Stream
+              .emit(result.content)
+              .through(Files[IO].writeUtf8(targetDir / s"${result.name}.scala"))
+              .compile
+              .drain
         }
-      } >> runScalaCli(dir, smithy4sVersion)
+        .productR(runScalaCli(dir, smithy4sVersion))
     }
+
+  private val tempDir: Resource[IO, Path] =
+    Files[IO].tempDirectory(None, "smithy4s-compile", None)
 
   private def runScalaCli(
       dir: Path,
       smithy4sVersion: String
   ): IO[Either[List[String], String]] =
     IO.blocking {
-      val javaExecutable = ProcessHandle.current().info().command().orElse("java")
+      val javaExecutable =
+        ProcessHandle.current().info().command().orElse("java")
       val process = new ProcessBuilder(
         java.util.Arrays.asList(
           javaExecutable,
           "-cp",
-          System.getProperty("java.class.path"),
+          scalaCliClasspath,
           "scala.cli.ScalaCli",
           "compile",
           "--scala",
@@ -77,23 +77,24 @@ class ScalaCliCompiler private (generator: Smithy4s) {
 
   private def stripAnsi(s: String): String =
     s.replaceAll("\u001B\\[[;\\d]*[mGKHF]", "")
-
-  private def withTempDir[A](f: Path => IO[A]): IO[A] =
-    Resource
-      .make(IO.blocking(Files.createTempDirectory("smithy4s-compile")))(dir =>
-        IO.blocking(deleteDirectory(dir))
-      )
-      .use(f)
-
-  private def deleteDirectory(path: Path): Unit =
-    if (Files.exists(path))
-      Files
-        .walk(path)
-        .sorted(java.util.Comparator.reverseOrder())
-        .forEach(Files.delete)
 }
 
 object ScalaCliCompiler {
-  def make(generator: Smithy4s): IO[ScalaCliCompiler] =
-    IO.pure(new ScalaCliCompiler(generator))
+  def make: IO[ScalaCliCompiler] =
+    IO.blocking {
+      val dep = DependencyParser
+        .dependency(
+          s"org.virtuslab.scala-cli::cli:${BuildInfo.scalaCliVersion}",
+          defaultScalaVersion = "3"
+        )
+        .left
+        .map(err => sys.error(s"Failed to parse scala-cli dependency: $err"))
+        .merge
+
+      val classpath = Fetch()
+        .addDependencies(dep)
+        .run()
+
+      classpath.map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)
+    }.map(new ScalaCliCompiler(_))
 }

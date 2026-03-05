@@ -2,10 +2,12 @@ package smithy4s_codegen.components.pages
 
 import com.raquo.airstream.ownership.ManualOwner
 import com.raquo.laminar.api.L._
+import com.raquo.airstream.flatten.SwitchingStrategy
 import smithy4s_codegen.api._
 import smithy4s_codegen.components.CodeEditor
 import smithy4s_codegen.components.CodeEditor.ValidationResult
 import smithy4s_codegen.components.CodeViewer
+import smithy4s_codegen.components.EditorContent
 import smithy4s_codegen.components.PermalinkCodec
 
 object Home {
@@ -58,7 +60,7 @@ object Home {
         compileClicked.events.mapTo(CodeEditor.CompileResult.Loading),
         compileClicked.events
           .withCurrentValueOf(editor.editorContent.signal)
-          .flatMapSwitch { case (_, content) =>
+          .flatMapSwitch { (content: EditorContent) =>
             api
               .smithy4sCompile(content.code, Some(content.deps.toList))
               .map(r => CodeEditor.CompileResult.Success(r.output))
@@ -108,19 +110,24 @@ object Home {
           button(
             cls := "px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50",
             onClick.mapTo(()) --> compileClicked,
-            disabled <-- compileResultVar.signal.map(_ ==
-              CodeEditor.CompileResult.Loading),
+            disabled <-- compileResultVar.signal.map(
+              _ ==
+                CodeEditor.CompileResult.Loading
+            ),
             "Compile"
           ),
           div(
             cls := "mt-2",
             child <-- compileResultVar.signal.map {
               case CodeEditor.CompileResult.NotStarted => emptyNode
-              case CodeEditor.CompileResult.Loading =>
+              case CodeEditor.CompileResult.Loading    =>
                 p(cls := "text-gray-500", "Compiling...")
               case CodeEditor.CompileResult.Success(output) =>
                 div(
-                  p(cls := "text-green-600 font-semibold", "Compilation successful"),
+                  p(
+                    cls := "text-green-600 font-semibold",
+                    "Compilation successful"
+                  ),
                   if (output.nonEmpty)
                     pre(
                       cls := "mt-1 p-2 text-sm bg-gray-50 border border-gray-300 rounded overflow-x-auto",

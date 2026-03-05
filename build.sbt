@@ -23,6 +23,7 @@ val smithyVersion = "1.68.0"
 val circeVersion = "0.14.15"
 val cirisVersion = "3.11.0"
 val scalaCliVersion = "1.12.3"
+val coursierVersion = "2.1.24"
 
 lazy val baseUri = settingKey[String](
   """Base URI of the backend, defaults to `""` (empty string)."""
@@ -186,7 +187,10 @@ lazy val backend = (project in file("modules/backend"))
   .settings(smithyClasspathSettings)
   .settings(
     name := "smithy4s-code-generation-backend",
-    buildInfoKeys := Seq[BuildInfoKey](smithy4sVersion, BuildInfoKey("scalaCliVersion", scalaCliVersion)),
+    buildInfoKeys := Seq[BuildInfoKey](
+      smithy4sVersion,
+      BuildInfoKey("scalaCliVersion", scalaCliVersion)
+    ),
     buildInfoPackage := "smithy4s_codegen",
     fork := true,
     libraryDependencies ++= Seq(
@@ -202,7 +206,10 @@ lazy val backend = (project in file("modules/backend"))
           "jsoniter-scala-core_3"
         ),
       "com.disneystreaming.smithy4s" %% "smithy4s-codegen" % smithy4sVersion.value,
-      "org.virtuslab.scala-cli" %% "cli" % scalaCliVersion,
+      ("io.get-coursier" % "coursier_2.13" % coursierVersion).exclude(
+        "org.scala-lang.modules",
+        "scala-collection-compat_2.13"
+      ),
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,

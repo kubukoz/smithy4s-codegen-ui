@@ -76,18 +76,20 @@ class SmithyCodeGenerationServiceImpl(
   def smithy4sCompile(
       content: String,
       deps: Option[List[Dependency]]
-  ): IO[Smithy4sCompileOutput] = {
-    compiler
-      .compile(
-        deps.map(resolveDeps).getOrElse(defaultDeps),
-        content,
-        BuildInfo.smithy4sVersion
-      )
-      .flatMap {
-        case Right(output) => IO.pure(Smithy4sCompileOutput(output))
-        case Left(errors)  => IO.raiseError(CompileError(errors))
-      }
-  }
+  ): IO[Smithy4sCompileOutput] =
+    IO.fromEither(
+      generator
+        .generate(deps.map(resolveDeps).getOrElse(defaultDeps), content)
+        .left
+        .map(errors => CompileError(errors.map(_.getMessage)))
+    ).flatMap { files =>
+      compiler
+        .compile(files, smithy4s_codegen.BuildInfo.smithy4sVersion)
+        .flatMap {
+          case Right(output) => IO.pure(Smithy4sCompileOutput(output))
+          case Left(errors)  => IO.raiseError(CompileError(errors))
+        }
+    }
 }
 
 object Routes {
@@ -96,7 +98,7 @@ object Routes {
       .eval(ModelLoader(config.smithyClasspathConfig))
       .map(ml => (new Validate(ml), new Smithy4s(ml)))
       .flatMap { case (validator, generator) =>
-        Resource.eval(ScalaCliCompiler.make(generator)).flatMap { compiler =>
+        Resource.eval(ScalaCliCompiler.make).flatMap { compiler =>
           val depNameToArtifactId = config.smithyClasspathConfig.entries.view
             .mapValues(_.artifactId)
             .toMap
