@@ -2,6 +2,7 @@ package smithy4s_codegen.compilation
 
 import cats.effect.IO
 import cats.effect.kernel.Resource
+import scala.concurrent.duration._
 import scala.concurrent.Future
 import coursier._
 import cats.syntax.all._
@@ -26,7 +27,7 @@ class ScalaCliCompiler private (scalaCliClasspath: String) {
               .through(Files[IO].writeUtf8(targetDir / s"${result.name}.scala"))
               .compile
               .drain
-        } *> runScalaCli(dir, extraDeps)
+        } *> runScalaCli(dir, extraDeps, files.size)
     }
 
   private val tempDir: Resource[IO, Path] =
@@ -34,7 +35,8 @@ class ScalaCliCompiler private (scalaCliClasspath: String) {
 
   private def runScalaCli(
       dir: Path,
-      extraDeps: List[String]
+      extraDeps: List[String],
+      fileCount: Int
   ): IO[Either[List[String], String]] = {
     val javaExecutable = ProcessHandle.current().info().command().orElse("java")
     val depArgs = extraDeps.flatMap(dep => List("--dep", dep))
@@ -43,7 +45,7 @@ class ScalaCliCompiler private (scalaCliClasspath: String) {
         depArgs ++
         List(dir.toString)
 
-    IO.println("ScalaCliCompiler: starting compilation") >>
+    IO.println(s"ScalaCliCompiler: starting compilation of $fileCount file(s)") >>
       Processes[IO]
         .spawn(Fs2ProcessBuilder(javaExecutable, args))
         .use { process =>
