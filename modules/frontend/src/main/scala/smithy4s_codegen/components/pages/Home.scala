@@ -74,7 +74,7 @@ object Home {
         )
       ),
       div(
-        cls := "h-auto p-2 basis-1/2 overflow-x-scroll",
+        cls := "h-full p-2 basis-1/2 overflow-y-auto overflow-x-hidden",
         validateResultErrors,
         viewer.component(convertedToSmithy4s)
       )

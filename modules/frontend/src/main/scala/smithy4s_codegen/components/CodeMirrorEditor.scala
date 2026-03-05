@@ -20,7 +20,8 @@ object CodeMirrorEditor {
       contentSignal: Signal[String],
       onChangeObserver: Observer[String],
       readOnly: Boolean = false,
-      extraExtensions: Seq[js.Any] = Nil
+      extraExtensions: Seq[js.Any] = Nil,
+      contentSized: Boolean = false
   ): HtmlElement = {
     var viewRef: Option[EditorView] = None
 
@@ -53,7 +54,7 @@ object CodeMirrorEditor {
      .concat(js.Array(extraExtensions*))
 
     div(
-      cls := "cm-wrapper h-full overflow-hidden",
+      cls := (if (contentSized) "cm-wrapper-content-sized" else "cm-wrapper h-full overflow-hidden"),
       onMountCallback { ctx =>
         val state = EditorState.create(
           js.Dynamic

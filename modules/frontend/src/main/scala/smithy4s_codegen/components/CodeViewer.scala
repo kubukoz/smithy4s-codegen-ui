@@ -40,12 +40,12 @@ class CodeViewer() {
       ),
       div(
         cls := "rounded-lg border border-gray-300 overflow-hidden",
-        styleAttr := "height: 300px",
         CodeMirrorEditor(
           contentSignal = signal.map(_._2.value),
           onChangeObserver = Observer.empty,
           readOnly = true,
-          extraExtensions = Seq(smithy4s_codegen.bindings.scalaLanguage)
+          extraExtensions = Seq(smithy4s_codegen.bindings.scalaLanguage),
+          contentSized = true
         )
       )
     )
