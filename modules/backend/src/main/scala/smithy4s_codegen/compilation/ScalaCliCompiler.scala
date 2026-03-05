@@ -10,8 +10,18 @@ import coursier.parse.DependencyParser
 import fs2.io.file.{Files, Path}
 import fs2.io.process.{ProcessBuilder => Fs2ProcessBuilder, Processes}
 import smithy4s_codegen.generation.CodegenResult
+import cats.effect.std.Supervisor
+import os.RelPath
 
-class ScalaCliCompiler private (scalaCliClasspath: String) {
+trait ScalaCliCompiler {
+  def compile(
+      files: List[(os.RelPath, CodegenResult)],
+      extraDeps: List[String] = Nil
+  ): IO[Either[List[String], String]]
+}
+
+private class ScalaCliCompilerImpl(scalaCliClasspath: String)
+    extends ScalaCliCompiler {
 
   def compile(
       files: List[(os.RelPath, CodegenResult)],
@@ -41,11 +51,20 @@ class ScalaCliCompiler private (scalaCliClasspath: String) {
     val javaExecutable = ProcessHandle.current().info().command().orElse("java")
     val depArgs = extraDeps.flatMap(dep => List("--dep", dep))
     val args =
-      List("-cp", scalaCliClasspath, "scala.cli.ScalaCli", "compile", "--scala", smithy4s_codegen.BuildInfo.scalaVersion) ++
+      List(
+        "-cp",
+        scalaCliClasspath,
+        "scala.cli.ScalaCli",
+        "compile",
+        "--scala",
+        smithy4s_codegen.BuildInfo.scalaVersion
+      ) ++
         depArgs ++
         List(dir.toString)
 
-    IO.println(s"ScalaCliCompiler: starting compilation of $fileCount file(s)") >>
+    IO.println(
+      s"ScalaCliCompiler: starting compilation of $fileCount file(s)"
+    ) >>
       Processes[IO]
         .spawn(Fs2ProcessBuilder(javaExecutable, args))
         .use { process =>
@@ -69,8 +88,11 @@ class ScalaCliCompiler private (scalaCliClasspath: String) {
         }
         .timeout(20.seconds)
         .flatTap {
-          case Right(_)     => IO.println("ScalaCliCompiler: compilation succeeded")
-          case Left(errors) => IO.println(s"ScalaCliCompiler: compilation failed:\n${errors.mkString("\n")}")
+          case Right(_) => IO.println("ScalaCliCompiler: compilation succeeded")
+          case Left(errors) =>
+            IO.println(
+              s"ScalaCliCompiler: compilation failed:\n${errors.mkString("\n")}"
+            )
         }
   }
 
@@ -80,24 +102,45 @@ class ScalaCliCompiler private (scalaCliClasspath: String) {
 
 object ScalaCliCompiler {
   def make(scalaCliVersion: String): IO[ScalaCliCompiler] =
-    IO.executionContext.flatMap { implicit ec =>
-      val dep = DependencyParser
-        .dependency(
-          s"org.virtuslab.scala-cli::cli:$scalaCliVersion",
-          defaultScalaVersion = "3"
-        )
-        .left
-        .map(err => sys.error(s"Failed to parse scala-cli dependency: $err"))
-        .merge
+    IO.executionContext
+      .flatMap { implicit ec =>
+        val dep = DependencyParser
+          .dependency(
+            s"org.virtuslab.scala-cli::cli:$scalaCliVersion",
+            defaultScalaVersion = "3"
+          )
+          .left
+          .map(err => sys.error(s"Failed to parse scala-cli dependency: $err"))
+          .merge
 
-      IO.println(s"ScalaCliCompiler: fetching scala-cli $scalaCliVersion") >>
-      IO.fromFuture(IO(Future {
-        Fetch()
-          .addDependencies(dep)
-          .run()
-          .map(_.getAbsolutePath)
-          .mkString(java.io.File.pathSeparator)
-      })).flatTap(_ => IO.println("ScalaCliCompiler: scala-cli classpath ready"))
-        .map(new ScalaCliCompiler(_))
-    }
+        IO.println(s"ScalaCliCompiler: fetching scala-cli $scalaCliVersion") >>
+          IO.fromFuture(IO {
+            Fetch()
+              .addDependencies(dep)
+              .future()
+          }).map {
+            _.map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)
+          }.flatTap { _ =>
+            IO.println("ScalaCliCompiler: scala-cli classpath ready")
+          }.map(new ScalaCliCompilerImpl(_))
+      }
+
+  extension (a: IO[ScalaCliCompiler]) {
+    def supervised(using sup: Supervisor[IO]): IO[ScalaCliCompiler] =
+      a.supervise(sup)
+        .flatTap { f =>
+          IO.println(s"Building compiler in the background... ${f}")
+        }
+        .map { fib =>
+          new {
+            def compile(
+                files: List[(RelPath, CodegenResult)],
+                extraDeps: List[String]
+            ): IO[Either[List[String], String]] =
+              fib.join
+                .flatMap(_.embedError)
+                .flatMap(_.compile(files, extraDeps))
+          }
+        }
+  }
 }
