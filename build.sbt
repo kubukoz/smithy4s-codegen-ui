@@ -60,7 +60,7 @@ lazy val api = (projectMatrix in file("modules/api"))
   .enablePlugins(Smithy4sCodegenPlugin)
   .settings(
     libraryDependencies ++= Seq(
-      "com.disneystreaming.smithy4s" %% "smithy4s-core" % smithy4sVersion.value
+      "com.disneystreaming.smithy4s" %%% "smithy4s-core" % smithy4sVersion.value
     )
   )
   .jvmPlatform(Seq(scala3))
