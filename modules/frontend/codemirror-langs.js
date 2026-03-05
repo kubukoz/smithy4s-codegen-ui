@@ -6,6 +6,9 @@ import { autocompletion, completeAnyWord } from "@codemirror/autocomplete";
 // Minimal Smithy tokenizer as a CodeMirror 5-style stream language
 const smithyMode = {
   name: "smithy",
+  languageData: {
+    commentTokens: { line: "//" },
+  },
   startState: () => ({ inBlockComment: false, inDocComment: false }),
   token(stream, state) {
     // Block doc comments: /// or ///
