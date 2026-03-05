@@ -89,7 +89,7 @@ lazy val frontend = (project in file("modules/frontend"))
       // Vite will proxy this to the backend. See vite.config.js
       else "/api"
     },
-    buildInfoKeys := Seq[BuildInfoKey](baseUri),
+    buildInfoKeys := Seq[BuildInfoKey](baseUri, scalaVersion),
     buildInfoPackage := "smithy4s_codegen"
   )
 

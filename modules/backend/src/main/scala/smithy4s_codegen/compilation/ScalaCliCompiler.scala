@@ -16,7 +16,8 @@ import os.RelPath
 trait ScalaCliCompiler {
   def compile(
       files: List[(os.RelPath, CodegenResult)],
-      extraDeps: List[String] = Nil
+      extraDeps: List[String] = Nil,
+      scalaVersion: String = smithy4s_codegen.BuildInfo.scalaVersion
   ): IO[Either[List[String], String]]
 }
 
@@ -25,7 +26,8 @@ private class ScalaCliCompilerImpl(scalaCliClasspath: String)
 
   def compile(
       files: List[(os.RelPath, CodegenResult)],
-      extraDeps: List[String] = Nil
+      extraDeps: List[String] = Nil,
+      scalaVersion: String = smithy4s_codegen.BuildInfo.scalaVersion
   ): IO[Either[List[String], String]] =
     tempDir.use { dir =>
       files
@@ -37,7 +39,7 @@ private class ScalaCliCompilerImpl(scalaCliClasspath: String)
               .through(Files[IO].writeUtf8(targetDir / s"${result.name}.scala"))
               .compile
               .drain
-        } *> runScalaCli(dir, extraDeps, files.size)
+        } *> runScalaCli(dir, extraDeps, files.size, scalaVersion)
     }
 
   private val tempDir: Resource[IO, Path] =
@@ -46,7 +48,8 @@ private class ScalaCliCompilerImpl(scalaCliClasspath: String)
   private def runScalaCli(
       dir: Path,
       extraDeps: List[String],
-      fileCount: Int
+      fileCount: Int,
+      scalaVersion: String
   ): IO[Either[List[String], String]] = {
     val javaExecutable = ProcessHandle.current().info().command().orElse("java")
     val depArgs = extraDeps.flatMap(dep => List("--dep", dep))
@@ -57,7 +60,7 @@ private class ScalaCliCompilerImpl(scalaCliClasspath: String)
         "scala.cli.ScalaCli",
         "compile",
         "--scala",
-        smithy4s_codegen.BuildInfo.scalaVersion
+        scalaVersion
       ) ++
         depArgs ++
         List(dir.toString)
@@ -86,7 +89,6 @@ private class ScalaCliCompilerImpl(scalaCliClasspath: String)
             else Left(List(output))
           }
         }
-        .timeout(20.seconds)
         .flatTap {
           case Right(_) => IO.println("ScalaCliCompiler: compilation succeeded")
           case Left(errors) =>
@@ -131,9 +133,12 @@ object ScalaCliCompiler {
         new {
           def compile(
               files: List[(RelPath, CodegenResult)],
-              extraDeps: List[String]
+              extraDeps: List[String],
+              scalaVersion: String
           ): IO[Either[List[String], String]] =
-            sem.permit.surround(compiler.compile(files, extraDeps))
+            sem.permit.surround(
+              compiler.compile(files, extraDeps, scalaVersion)
+            )
         }
       }
   }
@@ -148,11 +153,12 @@ object ScalaCliCompiler {
           new {
             def compile(
                 files: List[(RelPath, CodegenResult)],
-                extraDeps: List[String]
+                extraDeps: List[String],
+                scalaVersion: String
             ): IO[Either[List[String], String]] =
               fib.join
                 .flatMap(_.embedError)
-                .flatMap(_.compile(files, extraDeps))
+                .flatMap(_.compile(files, extraDeps, scalaVersion))
           }
         }
   }

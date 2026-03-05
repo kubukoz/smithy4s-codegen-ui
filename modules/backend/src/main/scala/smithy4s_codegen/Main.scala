@@ -19,6 +19,8 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import scala.concurrent.duration._
 import cats.effect.std.Supervisor
+import org.http4s.server.middleware.Timeout
+import org.http4s.server.middleware.Logger
 
 class SmithyCodeGenerationServiceImpl(
     depNameToArtifactId: Map[String, String],
@@ -76,7 +78,8 @@ class SmithyCodeGenerationServiceImpl(
   }
   def smithy4sCompile(
       content: String,
-      deps: Option[List[Dependency]]
+      deps: Option[List[Dependency]],
+      scalaVersion: Option[String]
   ): IO[Smithy4sCompileOutput] =
     IO.fromEither(
       generator
@@ -89,7 +92,8 @@ class SmithyCodeGenerationServiceImpl(
           files,
           List(
             s"com.disneystreaming.smithy4s::smithy4s-core:${smithy4s_codegen.BuildInfo.smithy4sVersion}"
-          )
+          ),
+          scalaVersion.getOrElse(smithy4s_codegen.BuildInfo.scalaVersion)
         )
         .flatMap {
           case Right(output) => IO.pure(Smithy4sCompileOutput(output))
@@ -146,7 +150,18 @@ object Main extends IOApp.Simple {
         .default[IO]
         .withPort(thePort)
         .withHost(theHost)
-        .withHttpApp(routes.orNotFound)
+        .withHttpApp(
+          Timeout
+            .httpApp[IO](20.seconds)
+            .compose(
+              Logger.httpApp[IO](
+                logHeaders = false,
+                logBody = false,
+                logAction = Some(IO.println)
+              )
+            )
+            .apply(routes.orNotFound)
+        )
         .withErrorHandler { case e =>
           IO.consoleForIO.printStackTrace(e) *> IO.raiseError(e)
         }

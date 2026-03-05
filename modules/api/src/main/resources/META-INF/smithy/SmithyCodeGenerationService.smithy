@@ -72,7 +72,10 @@ map Smithy4sGeneratedContent {
 
 @http(method: "POST", uri: "/smithy4s/compile", code: 200)
 operation Smithy4sCompile {
-    input := with [SmithyCodegenInput] {}
+    input := with [SmithyCodegenInput] {
+        @documentation("Scala version to use for compilation. If omitted, uses the server's default.")
+        scalaVersion: String
+    }
     output := {
         @required
         output: String

@@ -55,14 +55,17 @@ object Home {
 
     val compileClicked = new EventBus[Unit]
 
+    val scalaVersionVar: Var[String] = Var(smithy4s_codegen.BuildInfo.scalaVersion)
+
     val compileResult: EventStream[CodeEditor.CompileResult] =
       EventStream.merge(
         compileClicked.events.mapTo(CodeEditor.CompileResult.Loading),
         compileClicked.events
           .withCurrentValueOf(editor.editorContent.signal)
-          .flatMapSwitch { (content: EditorContent) =>
+          .withCurrentValueOf(scalaVersionVar.signal)
+          .flatMapSwitch { case ((content: EditorContent), scalaVersion: String) =>
             api
-              .smithy4sCompile(content.code, Some(content.deps.toList))
+              .smithy4sCompile(content.code, Some(content.deps.toList), Some(scalaVersion))
               .map(r => CodeEditor.CompileResult.Success(r.output))
               .recover {
                 case CompileError(errors) =>
@@ -114,14 +117,29 @@ object Home {
           case true =>
             div(
               cls := "mb-4",
-              button(
-                cls := "px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50",
-                onClick.mapTo(()) --> compileClicked,
-                disabled <-- compileResultVar.signal.map(
-                  _ ==
-                    CodeEditor.CompileResult.Loading
+              div(
+                cls := "flex items-center gap-2 mb-2",
+                button(
+                  cls := "px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50",
+                  onClick.mapTo(()) --> compileClicked,
+                  disabled <-- compileResultVar.signal.map(
+                    _ ==
+                      CodeEditor.CompileResult.Loading
+                  ),
+                  "Compile"
                 ),
-                "Compile"
+                label(
+                  cls := "text-sm text-gray-600",
+                  "Scala version: "
+                ),
+                input(
+                  cls := "px-2 py-2 border border-gray-300 rounded text-sm font-mono",
+                  typ := "text",
+                  controlled(
+                    value <-- scalaVersionVar.signal,
+                    onInput.mapToValue --> scalaVersionVar
+                  )
+                )
               ),
               div(
                 cls := "mt-2",
