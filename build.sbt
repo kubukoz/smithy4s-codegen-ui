@@ -189,7 +189,8 @@ lazy val backend = (project in file("modules/backend"))
     name := "smithy4s-code-generation-backend",
     buildInfoKeys := Seq[BuildInfoKey](
       smithy4sVersion,
-      BuildInfoKey("scalaCliVersion", scalaCliVersion)
+      BuildInfoKey("scalaCliVersion", scalaCliVersion),
+      scalaVersion
     ),
     buildInfoPackage := "smithy4s_codegen",
     fork := true,

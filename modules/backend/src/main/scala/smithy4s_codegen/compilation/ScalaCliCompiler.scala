@@ -7,9 +7,8 @@ import coursier._
 import cats.syntax.all._
 import coursier.parse.DependencyParser
 import fs2.io.file.{Files, Path}
+import fs2.io.process.{ProcessBuilder => Fs2ProcessBuilder, Processes}
 import smithy4s_codegen.generation.CodegenResult
-
-import java.nio.charset.StandardCharsets
 
 class ScalaCliCompiler private (scalaCliClasspath: String) {
 
@@ -36,41 +35,41 @@ class ScalaCliCompiler private (scalaCliClasspath: String) {
   private def runScalaCli(
       dir: Path,
       extraDeps: List[String]
-  ): IO[Either[List[String], String]] =
+  ): IO[Either[List[String], String]] = {
+    val javaExecutable = ProcessHandle.current().info().command().orElse("java")
+    val depArgs = extraDeps.flatMap(dep => List("--dep", dep))
+    val args =
+      List("-cp", scalaCliClasspath, "scala.cli.ScalaCli", "compile", "--scala", smithy4s_codegen.BuildInfo.scalaVersion) ++
+        depArgs ++
+        List(dir.toString)
+
     IO.println("ScalaCliCompiler: starting compilation") >>
-    IO.blocking {
-      val javaExecutable =
-        ProcessHandle.current().info().command().orElse("java")
-      val depArgs = extraDeps.flatMap(dep => List("--dep", dep))
-      val process = new ProcessBuilder(
-        java.util.Arrays.asList(
-          (List(javaExecutable, "-cp", scalaCliClasspath, "scala.cli.ScalaCli", "compile", "--scala", "2.13")
-            ++ depArgs
-            ++ List(dir.toString))*
-        )
-      ).redirectErrorStream(true)
-        .start()
-
-      // Drain the output stream in a separate thread to avoid deadlock when the
-      // subprocess fills the pipe buffer before completing.
-      var output = ""
-      val reader = new Thread(() =>
-        output = new String(
-          process.getInputStream.readAllBytes(),
-          StandardCharsets.UTF_8
-        )
-      )
-      reader.start()
-      val exitCode = process.waitFor()
-      reader.join()
-
-      val outputStr = stripAnsi(output)
-      if (exitCode == 0) Right(outputStr)
-      else Left(List(outputStr))
-    }.flatTap {
-      case Right(_)    => IO.println("ScalaCliCompiler: compilation succeeded")
-      case Left(errors) => IO.println(s"ScalaCliCompiler: compilation failed:\n${errors.mkString("\n")}")
-    }
+      Processes[IO]
+        .spawn(Fs2ProcessBuilder(javaExecutable, args))
+        .use { process =>
+          (
+            process.stdout
+              .observe(fs2.io.stdout)
+              .through(fs2.text.utf8.decode)
+              .compile
+              .string,
+            process.stderr
+              .observe(fs2.io.stderr)
+              .through(fs2.text.utf8.decode)
+              .compile
+              .string,
+            process.exitValue
+          ).mapN { (stdout, stderr, exitCode) =>
+            val output = stripAnsi(stdout + stderr)
+            if (exitCode == 0) Right(output)
+            else Left(List(output))
+          }
+        }
+        .flatTap {
+          case Right(_)     => IO.println("ScalaCliCompiler: compilation succeeded")
+          case Left(errors) => IO.println(s"ScalaCliCompiler: compilation failed:\n${errors.mkString("\n")}")
+        }
+  }
 
   private def stripAnsi(s: String): String =
     s.replaceAll("\u001B\\[[;\\d]*[mGKHF]", "")

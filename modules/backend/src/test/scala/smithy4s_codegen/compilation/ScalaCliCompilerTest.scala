@@ -17,7 +17,9 @@ object ScalaCliCompilerTest extends SimpleIOSuite {
         )
       )
       compiler.compile(files).map {
-        case Right(_)     => success
+        case Right(output) =>
+          expect(clue(output).contains(s"Compiling project (Scala ${BuildInfo.scalaVersion}")) and
+            expect(output.contains(s"Compiled project (Scala ${BuildInfo.scalaVersion}"))
         case Left(errors) => failure(errors.mkString("\n"))
       }
     }
