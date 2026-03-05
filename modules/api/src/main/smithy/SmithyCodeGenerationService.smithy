@@ -11,6 +11,7 @@ service SmithyCodeGenerationService {
         HealthCheck
         GetConfiguration
         SmithyValidate
+        // todo: rename to smithy4sGenerate
         Smithy4sConvert
         Smithy4sCompile
     ]
@@ -128,8 +129,10 @@ structure DependencyConfig {
 structure Permalink {
     @required
     version: Integer
+
     @required
     code: String
+
     @required
     deps: Dependencies
 }

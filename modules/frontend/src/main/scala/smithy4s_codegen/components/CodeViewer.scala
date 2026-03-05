@@ -33,12 +33,19 @@ class CodeViewer() {
       signal: Signal[(Path, Content)]
   ): HtmlElement =
     div(
-      p("path: " + path),
+      cls := "mb-4",
+      p(
+        cls := "text-xs font-mono text-gray-500 mb-1 px-1",
+        child.text <-- signal.map(_._1.value)
+      ),
       div(
-        "content: ",
-        code(
-          cls := "block p-2.5 text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300",
-          pre(child.text <-- signal.map(_._2.value))
+        cls := "rounded-lg border border-gray-300 overflow-hidden",
+        CodeMirrorEditor(
+          contentSignal = signal.map(_._2.value),
+          onChangeObserver = Observer.empty,
+          readOnly = true,
+          extraExtensions = Seq(smithy4s_codegen.bindings.scalaLanguage),
+          contentSized = true
         )
       )
     )
