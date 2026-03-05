@@ -84,7 +84,7 @@ class SmithyCodeGenerationServiceImpl(
         .map(errors => CompileError(errors.map(_.getMessage)))
     ).flatMap { files =>
       compiler
-        .compile(files, smithy4s_codegen.BuildInfo.smithy4sVersion)
+        .compile(files, List(s"com.disneystreaming.smithy4s::smithy4s-core:${smithy4s_codegen.BuildInfo.smithy4sVersion}"))
         .flatMap {
           case Right(output) => IO.pure(Smithy4sCompileOutput(output))
           case Left(errors)  => IO.raiseError(CompileError(errors))
@@ -98,7 +98,7 @@ object Routes {
       .eval(ModelLoader(config.smithyClasspathConfig))
       .map(ml => (new Validate(ml), new Smithy4s(ml)))
       .flatMap { case (validator, generator) =>
-        Resource.eval(ScalaCliCompiler.make).flatMap { compiler =>
+        Resource.eval(ScalaCliCompiler.make(smithy4s_codegen.BuildInfo.scalaCliVersion)).flatMap { compiler =>
           val depNameToArtifactId = config.smithyClasspathConfig.entries.view
             .mapValues(_.artifactId)
             .toMap
