@@ -125,10 +125,10 @@ object ScalaCliCompiler {
           }.map(new ScalaCliCompilerImpl(_))
       }
 
-  extension (a: IO[ScalaCliCompiler]) {
+  extension (compiler: ScalaCliCompiler) {
     def throttled(maxConcurrent: Int): IO[ScalaCliCompiler] =
-      (a, Semaphore[IO](maxConcurrent)).mapN { (compiler, sem) =>
-        new ScalaCliCompiler {
+      Semaphore[IO](maxConcurrent).map { sem =>
+        new {
           def compile(
               files: List[(RelPath, CodegenResult)],
               extraDeps: List[String]
@@ -136,7 +136,9 @@ object ScalaCliCompiler {
             sem.permit.surround(compiler.compile(files, extraDeps))
         }
       }
+  }
 
+  extension (a: IO[ScalaCliCompiler]) {
     def supervised(using sup: Supervisor[IO]): IO[ScalaCliCompiler] =
       a.supervise(sup)
         .flatTap { f =>

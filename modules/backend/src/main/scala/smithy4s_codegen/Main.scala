@@ -135,8 +135,8 @@ object Main extends IOApp.Simple {
     given Supervisor[IO] <- Supervisor[IO](await = false)
     compiler <- ScalaCliCompiler
       .make(smithy4s_codegen.BuildInfo.scalaCliVersion)
-      .throttled(10)
       .supervised
+      .flatMap(_.throttled(10))
       .toResource
     routes <- Routes.route(config, compiler).map(Routes.fullRoutes)
     thePort = port"9000"
