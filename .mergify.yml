@@ -15,13 +15,21 @@ pull_request_rules:
   - status-success=Build and Test
   actions:
     merge: {}
-- name: Label api PRs
+- name: Label api3 PRs
   conditions:
-  - files~=^modules/api/
+  - files~=^.sbt/matrix/api3/
   actions:
     label:
       add:
-      - api
+      - api3
+      remove: []
+- name: Label apiJS3 PRs
+  conditions:
+  - files~=^.sbt/matrix/apiJS3/
+  actions:
+    label:
+      add:
+      - apiJS3
       remove: []
 - name: Label backend PRs
   conditions:
