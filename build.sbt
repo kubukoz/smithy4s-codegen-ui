@@ -1,10 +1,12 @@
 import org.scalajs.linker.interface.ModuleSplitStyle
 import com.typesafe.sbt.packager.docker._
 import smithy4s_codegen._
+import sbtprojectmatrix.ProjectMatrixPlugin
 
 ThisBuild / organization := "com.example"
 ThisBuild / organizationName := "example"
-ThisBuild / scalaVersion := "3.8.2"
+val scala3 = "3.8.2"
+ThisBuild / scalaVersion := scala3
 ThisBuild / dynverSeparator := "-"
 
 ThisBuild / mergifyStewardConfig ~= (_.map(_.withMergeMinors(true)))
@@ -49,16 +51,24 @@ lazy val dockerTagOverride = settingKey[Option[String]](
 )
 
 lazy val root = (project in file("."))
-  .aggregate(api, frontend, backend)
+  .aggregate(api.projectRefs ++ Seq(frontend, backend).map(_.project): _*)
   .settings(
     addCommandAlias("ci", "mergifyCheck;test")
   )
 
-lazy val api = (project in file("modules/api"))
+lazy val api = (projectMatrix in file("modules/api"))
+  .enablePlugins(Smithy4sCodegenPlugin)
+  .settings(
+    libraryDependencies ++= Seq(
+      "com.disneystreaming.smithy4s" %% "smithy4s-core" % smithy4sVersion.value
+    )
+  )
+  .jvmPlatform(Seq(scala3))
+  .jsPlatform(Seq(scala3))
 
 lazy val frontend = (project in file("modules/frontend"))
-  .enablePlugins(ScalaJSPlugin, BuildInfoPlugin, Smithy4sCodegenPlugin)
-  .dependsOn(api)
+  .enablePlugins(ScalaJSPlugin, BuildInfoPlugin)
+  .dependsOn(api.js(scala3))
   .settings(
     name := "smithy4s-code-generation-frontend",
     cleanFiles ++= {
@@ -175,9 +185,8 @@ lazy val smithyClasspathSettings = Def.settings(
 )
 
 lazy val backend = (project in file("modules/backend"))
-  .dependsOn(api)
+  .dependsOn(api.jvm(scala3))
   .enablePlugins(
-    Smithy4sCodegenPlugin,
     JavaAppPackaging,
     DockerPlugin
   )
