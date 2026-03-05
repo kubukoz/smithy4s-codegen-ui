@@ -67,6 +67,7 @@ class ScalaCliCompiler private (scalaCliClasspath: String) {
             else Left(List(output))
           }
         }
+        .timeout(20.seconds)
         .flatTap {
           case Right(_)     => IO.println("ScalaCliCompiler: compilation succeeded")
           case Left(errors) => IO.println(s"ScalaCliCompiler: compilation failed:\n${errors.mkString("\n")}")
