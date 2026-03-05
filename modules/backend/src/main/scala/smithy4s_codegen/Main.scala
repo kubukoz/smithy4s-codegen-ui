@@ -44,18 +44,18 @@ class SmithyCodeGenerationServiceImpl(
       )
     )
 
-  private def resolveDeps(deps: List[Dependency]): List[String] =
-    deps.flatMap { dep =>
-      // Frontend sends artifact IDs, we need to map them to names for model loading
+  // Returns dep names for model loading (version doesn't matter here)
+  private def resolveDepNames(deps: Map[Dependency, DependencyConfig]): List[String] =
+    deps.keys.toList.flatMap { dep =>
       artifactIdToName.get(dep.value)
     }
 
   def smithy4sConvert(
       content: String,
-      deps: Option[List[Dependency]]
+      deps: Option[Map[Dependency, DependencyConfig]]
   ): IO[Smithy4sConvertOutput] = {
     generator
-      .generate(deps.map(resolveDeps).getOrElse(defaultDeps), content)
+      .generate(deps.map(resolveDepNames).getOrElse(defaultDeps), content)
       .leftMap(errors => InvalidSmithyContent(errors.map(_.getMessage)))
       .liftTo[IO]
       .map {
@@ -67,10 +67,10 @@ class SmithyCodeGenerationServiceImpl(
   }
   def smithyValidate(
       content: String,
-      deps: Option[List[Dependency]]
+      deps: Option[Map[Dependency, DependencyConfig]]
   ): IO[Unit] = {
     validator
-      .validateContent(deps.map(resolveDeps).getOrElse(defaultDeps), content)
+      .validateContent(deps.map(resolveDepNames).getOrElse(defaultDeps), content)
       .flatMap {
         case Right(value) => IO.unit
         case Left(value)  => IO.raiseError(InvalidSmithyContent(value.toList))
@@ -78,12 +78,12 @@ class SmithyCodeGenerationServiceImpl(
   }
   def smithy4sCompile(
       content: String,
-      deps: Option[List[Dependency]],
+      deps: Option[Map[Dependency, DependencyConfig]],
       scalaVersion: Option[String]
   ): IO[Smithy4sCompileOutput] =
     IO.fromEither(
       generator
-        .generate(deps.map(resolveDeps).getOrElse(defaultDeps), content)
+        .generate(deps.map(resolveDepNames).getOrElse(defaultDeps), content)
         .left
         .map(errors => CompileError(errors.map(_.getMessage)))
     ).flatMap { files =>

@@ -28,7 +28,7 @@ object Home {
         .composeChanges(_.debounce(2000))
         .flatMapSwitch { content =>
           api
-            .smithyValidate(content.code, Some(content.deps.toList))
+            .smithyValidate(content.code, Some(content.deps))
             .map(_ => CodeEditor.ValidationResult.Success(content))
             .recover {
               case InvalidSmithyContent(errors) =>
@@ -43,7 +43,7 @@ object Home {
         _.collect { case ValidationResult.Success(content) => content }
           .flatMapSwitch { content =>
             api
-              .smithy4sConvert(content.code, Some(content.deps.toList))
+              .smithy4sConvert(content.code, Some(content.deps))
               .map(r =>
                 CodeEditor.Smithy4sConversionResult.Success(r.generated)
               )
@@ -65,7 +65,7 @@ object Home {
           .withCurrentValueOf(scalaVersionVar.signal)
           .flatMapSwitch { case ((content: EditorContent), scalaVersion: String) =>
             api
-              .smithy4sCompile(content.code, Some(content.deps.toList), Some(scalaVersion))
+              .smithy4sCompile(content.code, Some(content.deps), Some(scalaVersion))
               .map(r => CodeEditor.CompileResult.Success(r.output))
               .recover {
                 case CompileError(errors) =>

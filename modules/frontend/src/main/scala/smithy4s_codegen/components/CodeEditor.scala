@@ -4,8 +4,8 @@ import com.raquo.laminar.api.L._
 import smithy4s_codegen.api.Content
 import smithy4s_codegen.api.Path
 import smithy4s_codegen.bindings.lzstring
-import smithy4s_codegen.api.Dependencies
 import smithy4s_codegen.api.Dependency
+import smithy4s_codegen.api.DependencyConfig
 import smithy4s_codegen.api.GetConfigurationOutput
 
 object CodeEditor {
@@ -48,7 +48,7 @@ class CodeEditor(
   val editorContent = Var(
     PermalinkCodec
       .readOnce()
-      .getOrElse(EditorContent(initial, Set.empty))
+      .getOrElse(EditorContent(initial, Map.empty))
   )
 
   // Store config as a Var for synchronous access
@@ -62,23 +62,12 @@ class CodeEditor(
   val updateValueFromPermalinkCode =
     value <-- editorContent.signal.map(_.code)
 
-  def updatePermalinkDeps(dep: Dependency) = {
-    val mod = { (isChecked: Boolean) =>
-      editorContent.update { content =>
-        val newSet =
-          if (isChecked) content.deps + dep
-          else content.deps - dep
-        content.copy(deps = newSet)
-      }
+  // Extract default version from artifact ID (last colon-separated segment)
+  private def defaultVersionOf(artifactId: String): String =
+    artifactId.lastIndexOf(':') match {
+      case -1  => ""
+      case idx => artifactId.drop(idx + 1)
     }
-    onChange.mapToChecked --> mod
-  }
-
-  def updateCheckFromPermalinkDeps(dep: Dependency) = {
-    checked <-- editorContent.signal.map { content =>
-      content.deps.find(_ == dep).isDefined
-    }
-  }
 
   val dependenciesCheckboxes = {
     def displayIfHasErrors = styleAttr <-- config.map(res =>
@@ -93,24 +82,75 @@ class CodeEditor(
     )
     val depsList = div(
       children <-- config.collect { case Right(cfg) =>
-        val deps = cfg.entries.values.toList.map { entry =>
+        val rows = cfg.entries.values.toList.map { entry =>
           val dep = entry.artifactId
-          div(
-            input(
-              cls := "m-2",
-              `type` := "checkbox",
-              nameAttr := dep.value,
-              idAttr := dep.value,
-              updatePermalinkDeps(dep),
-              updateCheckFromPermalinkDeps(dep)
+          val defaultVersion = defaultVersionOf(dep.value)
+
+          // Per-dep version Var, initialized from current state or default
+          val versionVar: Var[String] = Var(
+            editorContent.now().deps.get(dep).map(_.version).getOrElse(defaultVersion)
+          )
+
+          // When version changes and dep is checked, update the dep config
+          val updateVersion = versionVar.signal.changes --> { newVersion =>
+            editorContent.update { content =>
+              if (content.deps.contains(dep))
+                content.copy(deps = content.deps + (dep -> DependencyConfig(newVersion)))
+              else content
+            }
+          }
+
+          val toggleDep = onChange.mapToChecked --> { isChecked =>
+            editorContent.update { content =>
+              if (isChecked)
+                content.copy(deps = content.deps + (dep -> DependencyConfig(versionVar.now())))
+              else
+                content.copy(deps = content.deps - dep)
+            }
+          }
+
+          tr(
+            updateVersion,
+            td(
+              cls := "pr-2 py-1",
+              input(
+                `type` := "checkbox",
+                nameAttr := dep.value,
+                idAttr := dep.value,
+                toggleDep,
+                checked <-- editorContent.signal.map(_.deps.contains(dep))
+              )
             ),
-            label(forId := dep.value, dep.value, cls := "font-mono")
+            td(
+              cls := "pr-4 py-1 font-mono text-sm",
+              label(forId := dep.value, dep.value)
+            ),
+            td(
+              cls := "py-1",
+              input(
+                cls := "px-2 py-1 border border-gray-300 rounded text-sm font-mono w-28",
+                `type` := "text",
+                controlled(
+                  value <-- versionVar.signal,
+                  onInput.mapToValue --> versionVar
+                )
+              )
+            )
           )
         }
         List(
           fieldSet(
-            legend("Choose your dependencies"),
-            deps
+            legend(cls := "font-semibold mb-1", "Choose your dependencies"),
+            table(
+              thead(
+                tr(
+                  th(cls := "pr-2 py-1 text-left text-xs text-gray-500 font-medium", ""),
+                  th(cls := "pr-4 py-1 text-left text-xs text-gray-500 font-medium", "Dependency"),
+                  th(cls := "py-1 text-left text-xs text-gray-500 font-medium", "Version")
+                )
+              ),
+              tbody(rows)
+            )
           )
         )
       }
@@ -133,7 +173,9 @@ class CodeEditor(
             editorContent.set(
               EditorContent(
                 code = sample.code,
-                deps = resolvedDeps.map(Dependency(_))
+                deps = resolvedDeps.map { artifactId =>
+                  Dependency(artifactId) -> DependencyConfig(defaultVersionOf(artifactId))
+                }.toMap
               )
             )
           }
@@ -203,7 +245,7 @@ class CodeEditor(
 
 }
 
-final case class EditorContent(code: String, deps: Set[Dependency])
+final case class EditorContent(code: String, deps: Map[Dependency, DependencyConfig])
 
 /** Writes code to the URL hash and provides a stream of its decoded values.
   *
@@ -236,10 +278,29 @@ object PermalinkCodec {
   private val codePart = new HashPartValue("code")
   private val depsPart = new HashPartValue("dependencies")
 
+  // Encode deps as "artifactId|version" pairs joined by ","
+  // artifactIds may contain ":" so we use "|" as the key/version separator
+  private def encodeDeps(deps: Map[Dependency, DependencyConfig]): String =
+    deps.map { case (dep, cfg) => s"${dep.value}|${cfg.version}" }.mkString(",")
+
+  private def decodeDeps(s: String): Map[Dependency, DependencyConfig] =
+    s.split(",")
+      .filter(_.nonEmpty)
+      .flatMap { entry =>
+        entry.lastIndexOf('|') match {
+          case -1  => None
+          case idx =>
+            val artifactId = entry.take(idx)
+            val version = entry.drop(idx + 1)
+            Some(Dependency(artifactId) -> DependencyConfig(version))
+        }
+      }
+      .toMap
+
   private def encode(value: EditorContent): String = {
     val code =
       codePart.encode(lzstring.compressToEncodedURIComponent(value.code))
-    val deps = depsPart.encode(value.deps.map(_.value).mkString(","))
+    val deps = depsPart.encode(encodeDeps(value.deps))
     val hash = List(code, deps).mkString(";")
     s"#$hash"
   }
@@ -255,14 +316,8 @@ object PermalinkCodec {
       }.flatten
       val deps =
         hashParts
-          .collectFirst { case depsPart(value) =>
-            value
-              .split(",")
-              .filter(_.nonEmpty)
-              .toSet
-              .map(Dependency(_))
-          }
-          .getOrElse(Set.empty)
+          .collectFirst { case depsPart(value) => decodeDeps(value) }
+          .getOrElse(Map.empty)
       maybeCode.map(code => EditorContent(code, deps))
     } else None
   }

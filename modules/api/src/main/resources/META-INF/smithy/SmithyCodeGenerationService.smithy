@@ -37,7 +37,9 @@ operation GetConfiguration {
 @http(method: "POST", uri: "/smithy/validate", code: 200)
 operation SmithyValidate {
     input := with [SmithyCodegenInput] {}
-    errors: [InvalidSmithyContent]
+    errors: [
+        InvalidSmithyContent
+    ]
 }
 
 @error("client")
@@ -54,11 +56,15 @@ list ErrorMessages {
 @http(method: "POST", uri: "/smithy4s/convert", code: 200)
 operation Smithy4sConvert {
     input := with [SmithyCodegenInput] {}
+
     output := {
         @required
         generated: Smithy4sGeneratedContent
     }
-    errors: [InvalidSmithyContent]
+
+    errors: [
+        InvalidSmithyContent
+    ]
 }
 
 string Path
@@ -76,11 +82,16 @@ operation Smithy4sCompile {
         @documentation("Scala version to use for compilation. If omitted, uses the server's default.")
         scalaVersion: String
     }
+
     output := {
         @required
         output: String
     }
-    errors: [InvalidSmithyContent, CompileError]
+
+    errors: [
+        InvalidSmithyContent
+        CompileError
+    ]
 }
 
 @error("client")
@@ -93,14 +104,22 @@ structure CompileError {
 structure SmithyCodegenInput {
     @required
     content: String
+
     @documentation("If omitted, use the server's default.")
     deps: Dependencies
 }
 
 string Dependency
 
-list Dependencies {
-    member: Dependency
+/// Map from dependency artifact ID to its configuration
+map Dependencies {
+    key: Dependency
+    value: DependencyConfig
+}
+
+structure DependencyConfig {
+    @required
+    version: String
 }
 
 string DependencyName
