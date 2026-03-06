@@ -24,6 +24,8 @@ val http4sVersion = "0.23.33"
 val smithyVersion = "1.68.0"
 val circeVersion = "0.14.15"
 val cirisVersion = "3.11.0"
+val scalaCliVersion = "1.12.3"
+val coursierVersion = "2.1.24"
 
 lazy val baseUri = settingKey[String](
   """Base URI of the backend, defaults to `""` (empty string)."""
@@ -51,7 +53,9 @@ lazy val dockerTagOverride = settingKey[Option[String]](
 )
 
 lazy val root = (project in file("."))
-  .aggregate(api.projectRefs ++ Seq(frontend, backend).map(_.project): _*)
+  .aggregate(
+    api.projectRefs ++ Seq(frontend, backend, scalaCliDeps).map(_.project): _*
+  )
   .settings(
     addCommandAlias("ci", "mergifyCheck;test")
   )
@@ -83,6 +87,19 @@ lazy val frontend = (project in file("modules/frontend"))
         )
       // .withSourceMap(true) -- enable for source-map-explorer
     },
+    Test / scalaJSLinkerConfig ~= {
+      _.withModuleKind(ModuleKind.CommonJSModule)
+        .withModuleSplitStyle(ModuleSplitStyle.FewestModules)
+    },
+    Test / jsEnv := {
+      val nodeModules =
+        (ThisBuild / baseDirectory).value / "modules" / "frontend" / "node_modules"
+      new org.scalajs.jsenv.nodejs.NodeJSEnv(
+        org.scalajs.jsenv.nodejs.NodeJSEnv
+          .Config()
+          .withEnv(Map("NODE_PATH" -> nodeModules.getAbsolutePath))
+      )
+    },
     /* Depend on the scalajs-dom library.
      * It provides static types for the browser DOM APIs.
      */
@@ -90,14 +107,16 @@ lazy val frontend = (project in file("modules/frontend"))
       "org.scala-js" %%% "scalajs-dom" % "2.8.1",
       "com.raquo" %%% "laminar" % "17.2.1",
       "tech.neander" %%% "smithy4s-fetch" % "0.0.4",
-      "org.http4s" %%% "http4s-client" % http4sVersion
+      "org.http4s" %%% "http4s-client" % http4sVersion,
+      "com.disneystreaming.smithy4s" %%% "smithy4s-json" % smithy4sVersion.value,
+      "org.typelevel" %%% "weaver-cats" % "0.11.3" % Test
     ),
     baseUri := {
       if (bundleAssets.value) ""
       // Vite will proxy this to the backend. See vite.config.js
       else "/api"
     },
-    buildInfoKeys := Seq[BuildInfoKey](baseUri),
+    buildInfoKeys := Seq[BuildInfoKey](baseUri, scalaVersion, smithy4sVersion),
     buildInfoPackage := "smithy4s_codegen"
   )
 
@@ -188,11 +207,18 @@ lazy val backend = (project in file("modules/backend"))
   .dependsOn(api.jvm(scala3))
   .enablePlugins(
     JavaAppPackaging,
-    DockerPlugin
+    DockerPlugin,
+    BuildInfoPlugin
   )
   .settings(smithyClasspathSettings)
   .settings(
     name := "smithy4s-code-generation-backend",
+    buildInfoKeys := Seq[BuildInfoKey](
+      smithy4sVersion,
+      BuildInfoKey("scalaCliVersion", scalaCliVersion),
+      scalaVersion
+    ),
+    buildInfoPackage := "smithy4s_codegen",
     fork := true,
     libraryDependencies ++= Seq(
       // Conflicting Scala suffixes in jsoniter between this and codegen - we choose the 2.13 version and hope for the best
@@ -207,6 +233,10 @@ lazy val backend = (project in file("modules/backend"))
           "jsoniter-scala-core_3"
         ),
       "com.disneystreaming.smithy4s" %% "smithy4s-codegen" % smithy4sVersion.value,
+      ("io.get-coursier" % "coursier_2.13" % coursierVersion).exclude(
+        "org.scala-lang.modules",
+        "scala-collection-compat_2.13"
+      ),
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
       "io.circe" %% "circe-parser" % circeVersion,
@@ -279,4 +309,12 @@ lazy val backend = (project in file("modules/backend"))
       }
     },
     dockerBaseImage := "eclipse-temurin:17.0.6_10-jre"
+  )
+
+// Fake module that exists solely so Scala Steward can track and update the
+// scala-cli dependency version. Not published.
+lazy val scalaCliDeps = (project in file("modules/scala-cli-deps"))
+  .settings(
+    publish / skip := true,
+    libraryDependencies += "org.virtuslab.scala-cli" %% "cli" % scalaCliVersion % Runtime
   )
