@@ -47,3 +47,11 @@ pull_request_rules:
       add:
       - frontend
       remove: []
+- name: Label scala-cli-deps PRs
+  conditions:
+  - files~=^modules/scala-cli-deps/
+  actions:
+    label:
+      add:
+      - scala-cli-deps
+      remove: []

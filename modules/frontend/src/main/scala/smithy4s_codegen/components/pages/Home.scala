@@ -2,11 +2,12 @@ package smithy4s_codegen.components.pages
 
 import com.raquo.airstream.ownership.ManualOwner
 import com.raquo.laminar.api.L._
+import com.raquo.airstream.flatten.SwitchingStrategy
 import smithy4s_codegen.api._
 import smithy4s_codegen.components.CodeEditor
 import smithy4s_codegen.components.CodeEditor.ValidationResult
 import smithy4s_codegen.components.CodeViewer
-import smithy4s_codegen.components.PermalinkCodec
+import smithy4s_codegen.components.EditorContent
 
 object Home {
   def apply(
@@ -18,7 +19,7 @@ object Home {
 
     locally {
       implicit val owner = new ManualOwner
-      editor.editorContent.signal.foreach(PermalinkCodec.write)
+      editor.editorContent.signal.foreach(editor.writePermalink)
     }
 
     val validate: EventStream[CodeEditor.ValidationResult] =
@@ -26,7 +27,7 @@ object Home {
         .composeChanges(_.debounce(2000))
         .flatMapSwitch { content =>
           api
-            .smithyValidate(content.code, Some(content.deps.toList))
+            .smithyValidate(content.code, Some(content.deps))
             .map(_ => CodeEditor.ValidationResult.Success(content))
             .recover {
               case InvalidSmithyContent(errors) =>
@@ -41,7 +42,7 @@ object Home {
         _.collect { case ValidationResult.Success(content) => content }
           .flatMapSwitch { content =>
             api
-              .smithy4sConvert(content.code, Some(content.deps.toList))
+              .smithy4sConvert(content.code, Some(content.deps))
               .map(r =>
                 CodeEditor.Smithy4sConversionResult.Success(r.generated)
               )
@@ -51,10 +52,55 @@ object Home {
           }
       }
 
+    val compileClicked = new EventBus[Unit]
+
+    val scalaVersionVar: Var[String] = Var(
+      smithy4s_codegen.BuildInfo.scalaVersion
+    )
+    val smithy4sVersionVar: Var[String] = Var(
+      smithy4s_codegen.BuildInfo.smithy4sVersion
+    )
+
+    val compileResult: EventStream[CodeEditor.CompileResult] =
+      EventStream.merge(
+        compileClicked.events.mapTo(CodeEditor.CompileResult.Loading),
+        compileClicked.events
+          .withCurrentValueOf(editor.editorContent.signal)
+          .withCurrentValueOf(scalaVersionVar.signal)
+          .withCurrentValueOf(smithy4sVersionVar.signal)
+          .flatMapSwitch { (content, scalaVersion, smithy4sVersion) =>
+            api
+              .smithy4sCompile(
+                content.code,
+                Some(content.deps),
+                Some(scalaVersion),
+                Some(smithy4sVersion)
+              )
+              .map(r => CodeEditor.CompileResult.Success(r.output))
+              .recover {
+                case CompileError(errors) =>
+                  Some(CodeEditor.CompileResult.Failed(errors))
+                case InvalidSmithyContent(errors) =>
+                  Some(CodeEditor.CompileResult.Failed(errors))
+                case ex =>
+                  Some(CodeEditor.CompileResult.UnknownFailure(ex))
+              }
+          }
+      )
+
+    val compileResultVar: Var[CodeEditor.CompileResult] =
+      Var(CodeEditor.CompileResult.NotStarted)
+
+    val hasGeneratedCode: Var[Boolean] = Var(false)
+
     val (validateResultIcon, validateResultErrors) =
       editor.validationResult(validate)
 
     div(
+      compileResult --> compileResultVar,
+      convertedToSmithy4s.collect {
+        case _: CodeEditor.Smithy4sConversionResult.Success => true
+      } --> hasGeneratedCode,
       cls := "container mx-auto h-full py-2 flex",
       div(
         cls := "h-full p-2 relative basis-1/2 flex flex-col",
@@ -76,6 +122,86 @@ object Home {
       div(
         cls := "h-full p-2 basis-1/2 overflow-y-auto overflow-x-hidden",
         validateResultErrors,
+        child <-- hasGeneratedCode.signal.map {
+          case false => emptyNode
+          case true  =>
+            div(
+              cls := "mb-4",
+              div(
+                cls := "flex items-center gap-2 mb-2",
+                button(
+                  cls := "px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50",
+                  onClick.mapTo(()) --> compileClicked,
+                  disabled <-- compileResultVar.signal.map(
+                    _ ==
+                      CodeEditor.CompileResult.Loading
+                  ),
+                  "Compile"
+                ),
+                label(
+                  cls := "text-sm text-gray-600",
+                  "Scala version (compilation): "
+                ),
+                input(
+                  cls := "px-2 py-2 border border-gray-300 rounded text-sm font-mono",
+                  typ := "text",
+                  controlled(
+                    value <-- scalaVersionVar.signal,
+                    onInput.mapToValue --> scalaVersionVar
+                  )
+                ),
+                label(
+                  cls := "text-sm text-gray-600",
+                  "Smithy4s version (compilation): "
+                ),
+                input(
+                  cls := "px-2 py-2 border border-gray-300 rounded text-sm font-mono",
+                  typ := "text",
+                  controlled(
+                    value <-- smithy4sVersionVar.signal,
+                    onInput.mapToValue --> smithy4sVersionVar
+                  )
+                )
+              ),
+              div(
+                cls := "mt-2",
+                child <-- compileResultVar.signal.map {
+                  case CodeEditor.CompileResult.NotStarted => emptyNode
+                  case CodeEditor.CompileResult.Loading    =>
+                    p(cls := "text-gray-500", "Compiling...")
+                  case CodeEditor.CompileResult.Success(output) =>
+                    div(
+                      p(
+                        cls := "text-green-600 font-semibold",
+                        "Compilation successful"
+                      ),
+                      if (output.nonEmpty)
+                        pre(
+                          cls := "mt-1 p-2 text-sm bg-gray-50 border border-gray-300 rounded overflow-x-auto",
+                          output
+                        )
+                      else emptyNode
+                    )
+                  case CodeEditor.CompileResult.Failed(errors) =>
+                    div(
+                      p(
+                        cls := "text-red-600 font-semibold",
+                        "Compilation failed"
+                      ),
+                      pre(
+                        cls := "mt-1 p-2 text-sm text-red-800 bg-red-50 border border-red-300 rounded overflow-x-auto",
+                        errors.mkString("\n")
+                      )
+                    )
+                  case CodeEditor.CompileResult.UnknownFailure(ex) =>
+                    p(
+                      cls := "text-red-600",
+                      s"Unexpected error: ${ex.getMessage}"
+                    )
+                }
+              )
+            )
+        },
         viewer.component(convertedToSmithy4s)
       )
     )

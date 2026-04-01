@@ -13,6 +13,7 @@ service SmithyCodeGenerationService {
         SmithyValidate
         // todo: rename to smithy4sGenerate
         Smithy4sConvert
+        Smithy4sCompile
     ]
 }
 
@@ -36,14 +37,7 @@ operation GetConfiguration {
 
 @http(method: "POST", uri: "/smithy/validate", code: 200)
 operation SmithyValidate {
-    input := {
-        @required
-        content: String
-
-        @documentation("If omitted, use the server's default.")
-        deps: Dependencies
-    }
-
+    input := with [SmithyCodegenInput] {}
     errors: [
         InvalidSmithyContent
     ]
@@ -62,13 +56,7 @@ list ErrorMessages {
 
 @http(method: "POST", uri: "/smithy4s/convert", code: 200)
 operation Smithy4sConvert {
-    input := {
-        @required
-        content: String
-
-        @documentation("If omitted, use the server's default.")
-        deps: Dependencies
-    }
+    input := with [SmithyCodegenInput] {}
 
     output := {
         @required
@@ -89,10 +77,64 @@ map Smithy4sGeneratedContent {
     value: Content
 }
 
+@http(method: "POST", uri: "/smithy4s/compile", code: 200)
+operation Smithy4sCompile {
+    input := with [SmithyCodegenInput] {
+        @documentation("Scala version to use for compilation. If omitted, uses the server's default.")
+        scalaVersion: String
+
+        @documentation("Smithy4s version to use for compilation. If omitted, uses the server's default.")
+        smithy4sVersion: String
+    }
+
+    output := {
+        @required
+        output: String
+    }
+
+    errors: [
+        InvalidSmithyContent
+        CompileError
+    ]
+}
+
+@error("client")
+structure CompileError {
+    @required
+    errors: ErrorMessages
+}
+
+@mixin
+structure SmithyCodegenInput {
+    @required
+    content: String
+
+    @documentation("If omitted, use the server's default.")
+    deps: Dependencies
+}
+
 string Dependency
 
-list Dependencies {
-    member: Dependency
+/// Map from dependency artifact ID to its configuration
+map Dependencies {
+    key: Dependency
+    value: DependencyConfig
+}
+
+structure DependencyConfig {
+    @required
+    version: String
+}
+
+structure Permalink {
+    @required
+    version: Integer
+
+    @required
+    code: String
+
+    @required
+    deps: Dependencies
 }
 
 string DependencyName

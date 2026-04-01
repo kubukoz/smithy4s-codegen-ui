@@ -10,6 +10,7 @@ import org.http4s.ember.server._
 import org.http4s.implicits._
 import smithy4s.http4s.SimpleRestJsonBuilder
 import smithy4s_codegen.api._
+import smithy4s_codegen.compilation._
 import smithy4s_codegen.generation._
 import smithy4s_codegen.smithy._
 
@@ -17,11 +18,15 @@ import java.io.File
 import java.nio.file.Files
 import java.nio.file.Paths
 import scala.concurrent.duration._
+import cats.effect.std.Supervisor
+import org.http4s.server.middleware.Timeout
+import org.http4s.server.middleware.Logger
 
 class SmithyCodeGenerationServiceImpl(
     depNameToArtifactId: Map[String, String],
     generator: Smithy4s,
-    validator: Validate
+    validator: Validate,
+    compiler: ScalaCliCompiler
 ) extends SmithyCodeGenerationService[IO] {
   private val defaultDeps = List.empty[String] // TODO
   private val artifactIdToName = depNameToArtifactId.map(_.swap)
@@ -39,18 +44,18 @@ class SmithyCodeGenerationServiceImpl(
       )
     )
 
-  private def resolveDeps(deps: List[Dependency]): List[String] =
-    deps.flatMap { dep =>
-      // Frontend sends artifact IDs, we need to map them to names for model loading
+  // Returns dep names for model loading (version doesn't matter here)
+  private def resolveDepNames(deps: Map[Dependency, DependencyConfig]): List[String] =
+    deps.keys.toList.flatMap { dep =>
       artifactIdToName.get(dep.value)
     }
 
   def smithy4sConvert(
       content: String,
-      deps: Option[List[Dependency]]
+      deps: Option[Map[Dependency, DependencyConfig]]
   ): IO[Smithy4sConvertOutput] = {
     generator
-      .generate(deps.map(resolveDeps).getOrElse(defaultDeps), content)
+      .generate(deps.map(resolveDepNames).getOrElse(defaultDeps), content)
       .leftMap(errors => InvalidSmithyContent(errors.map(_.getMessage)))
       .liftTo[IO]
       .map {
@@ -62,19 +67,49 @@ class SmithyCodeGenerationServiceImpl(
   }
   def smithyValidate(
       content: String,
-      deps: Option[List[Dependency]]
+      deps: Option[Map[Dependency, DependencyConfig]]
   ): IO[Unit] = {
     validator
-      .validateContent(deps.map(resolveDeps).getOrElse(defaultDeps), content)
+      .validateContent(deps.map(resolveDepNames).getOrElse(defaultDeps), content)
       .flatMap {
         case Right(value) => IO.unit
         case Left(value)  => IO.raiseError(InvalidSmithyContent(value.toList))
       }
   }
+  def smithy4sCompile(
+      content: String,
+      deps: Option[Map[Dependency, DependencyConfig]],
+      scalaVersion: Option[String],
+      smithy4sVersion: Option[String]
+  ): IO[Smithy4sCompileOutput] =
+    IO.fromEither(
+      generator
+        .generate(deps.map(resolveDepNames).getOrElse(defaultDeps), content)
+        .left
+        .map(errors => CompileError(errors.map(_.getMessage)))
+    ).flatMap { files =>
+      val resolvedSmithy4sVersion =
+        smithy4sVersion.getOrElse(smithy4s_codegen.BuildInfo.smithy4sVersion)
+      compiler
+        .compile(
+          files,
+          List(
+            s"com.disneystreaming.smithy4s::smithy4s-core:$resolvedSmithy4sVersion"
+          ),
+          scalaVersion.getOrElse(smithy4s_codegen.BuildInfo.scalaVersion)
+        )
+        .flatMap {
+          case Right(output) => IO.pure(Smithy4sCompileOutput(output))
+          case Left(errors)  => IO.raiseError(CompileError(errors))
+        }
+    }
 }
 
 object Routes {
-  def route(config: Config): Resource[IO, HttpRoutes[IO]] =
+  def route(
+      config: Config,
+      compiler: ScalaCliCompiler
+  ): Resource[IO, HttpRoutes[IO]] =
     Resource
       .eval(ModelLoader(config.smithyClasspathConfig))
       .map(ml => (new Validate(ml), new Smithy4s(ml)))
@@ -87,7 +122,8 @@ object Routes {
             new SmithyCodeGenerationServiceImpl(
               depNameToArtifactId,
               generator,
-              validator
+              validator,
+              compiler
             )
           )
           .resource
@@ -103,7 +139,13 @@ object Routes {
 object Main extends IOApp.Simple {
   val server = for {
     config <- Config.makeConfig.toResource
-    routes <- Routes.route(config).map(Routes.fullRoutes)
+    given Supervisor[IO] <- Supervisor[IO](await = false)
+    compiler <- ScalaCliCompiler
+      .make(smithy4s_codegen.BuildInfo.scalaCliVersion)
+      .supervised
+      .flatMap(_.throttled(10))
+      .toResource
+    routes <- Routes.route(config, compiler).map(Routes.fullRoutes)
     thePort = port"9000"
     theHost = host"0.0.0.0"
     res <-
@@ -111,8 +153,22 @@ object Main extends IOApp.Simple {
         .default[IO]
         .withPort(thePort)
         .withHost(theHost)
-        .withHttpApp(routes.orNotFound)
-        .withShutdownTimeout(5.seconds)
+        .withHttpApp(
+          Timeout
+            .httpApp[IO](20.seconds)
+            .compose(
+              Logger.httpApp[IO](
+                logHeaders = false,
+                logBody = false,
+                logAction = Some(IO.println)
+              )
+            )
+            .apply(routes.orNotFound)
+        )
+        .withErrorHandler { case e =>
+          IO.consoleForIO.printStackTrace(e) *> IO.raiseError(e)
+        }
+        .withShutdownTimeout(Duration.Zero)
         .build
     _ <- Resource.eval(IO.println(s"Server started on: $theHost:$thePort"))
   } yield res
