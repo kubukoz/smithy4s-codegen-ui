@@ -89,7 +89,7 @@ lazy val frontend = (project in file("modules/frontend"))
     libraryDependencies ++= Seq(
       "org.scala-js" %%% "scalajs-dom" % "2.8.1",
       "com.raquo" %%% "laminar" % "17.2.1",
-      "tech.neander" %%% "smithy4s-fetch" % "0.0.4",
+      "tech.neander" %%% "smithy4s-fetch" % "0.0.5",
       "org.http4s" %%% "http4s-client" % http4sVersion
     ),
     baseUri := {
