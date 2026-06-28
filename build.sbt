@@ -213,7 +213,7 @@ lazy val backend = (project in file("modules/backend"))
       "is.cir" %% "ciris" % cirisVersion,
       "software.amazon.smithy" % "smithy-model" % smithyVersion,
       "org.http4s" %% "http4s-ember-server" % http4sVersion,
-      "org.typelevel" %% "weaver-cats" % "0.12.0" % Test
+      "org.typelevel" %% "weaver-cats" % "0.13.0" % Test
     ),
     smithyClasspathDir := "smithy-classpath",
     smithyClasspath := Seq(
