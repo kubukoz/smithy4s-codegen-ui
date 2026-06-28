@@ -5,7 +5,7 @@ import sbtprojectmatrix.ProjectMatrixPlugin
 
 ThisBuild / organization := "com.example"
 ThisBuild / organizationName := "example"
-val scala3 = "3.8.3"
+val scala3 = "3.8.4"
 ThisBuild / scalaVersion := scala3
 ThisBuild / dynverSeparator := "-"
 
