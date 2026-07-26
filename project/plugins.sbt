@@ -1,5 +1,5 @@
 addSbtPlugin(
-  "com.disneystreaming.smithy4s" % "smithy4s-sbt-codegen" % "0.19.10"
+  "com.disneystreaming.smithy4s" % "smithy4s-sbt-codegen" % "0.19.11"
 )
 addSbtPlugin("com.github.sbt" % "sbt-native-packager" % "1.11.7")
 addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.22.0")
