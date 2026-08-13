@@ -195,17 +195,8 @@ lazy val backend = (project in file("modules/backend"))
     name := "smithy4s-code-generation-backend",
     fork := true,
     libraryDependencies ++= Seq(
-      // Conflicting Scala suffixes in jsoniter between this and codegen - we choose the 2.13 version and hope for the best
-      ("com.disneystreaming.smithy4s" %% "smithy4s-http4s" % smithy4sVersion.value)
-        .exclude(
-          "com.github.plokhotnyuk.jsoniter-scala",
-          "jsoniter-scala-core_3"
-        ),
-      ("com.disneystreaming.smithy4s" %% "smithy4s-http4s-swagger" % smithy4sVersion.value)
-        .exclude(
-          "com.github.plokhotnyuk.jsoniter-scala",
-          "jsoniter-scala-core_3"
-        ),
+      "com.disneystreaming.smithy4s" %% "smithy4s-http4s" % smithy4sVersion.value,
+      "com.disneystreaming.smithy4s" %% "smithy4s-http4s-swagger" % smithy4sVersion.value,
       "com.disneystreaming.smithy4s" %% "smithy4s-codegen" % smithy4sVersion.value,
       "io.circe" %% "circe-core" % circeVersion,
       "io.circe" %% "circe-generic" % circeVersion,
