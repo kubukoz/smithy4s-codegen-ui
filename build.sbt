@@ -7,18 +7,25 @@ ThisBuild / organization := "com.example"
 ThisBuild / organizationName := "example"
 val scala3 = "3.8.3"
 ThisBuild / scalaVersion := scala3
-ThisBuild / dynverSeparator := "-"
+ThisBuild / tlBaseVersion := "0.0"
+ThisBuild / tlJdkRelease := Some(17)
+// Read git state via the git CLI instead of JGit. sbt-typelevel derives the
+// version from git, and JGit fails outright on checkouts where `.git` is a file
+// rather than a directory (linked worktrees).
+ThisBuild / com.github.sbt.git.SbtGit.GitKeys.useConsoleForROGit := true
+
+// This is an application, not a published library: no headers, no MiMa, no
+// scaladoc, and no release automation driven off branches or tags.
+ThisBuild / tlCiHeaderCheck := false
+ThisBuild / tlCiMimaBinaryIssueCheck := false
+ThisBuild / tlCiDocCheck := false
+ThisBuild / tlCiReleaseBranches := Seq()
+ThisBuild / tlCiReleaseTags := false
 
 ThisBuild / mergifyStewardConfig ~= (_.map(_.withMergeMinors(true)))
-ThisBuild / mergifySuccessConditions := List(
-  MergifyCondition.Custom("status-success=Build and Test")
-)
-
-ThisBuild / scalacOptions ++= Seq(
-  "-release:17"
-)
-
-ThisBuild / githubWorkflowGenerate := {}
+// No explicit mergifySuccessConditions: the default derives them from the
+// generated CI matrix, so the required checks track the workflow automatically
+// (the old hardcoded "Build and Test" no longer matches any job name).
 
 val http4sVersion = "0.23.36"
 val smithyVersion = "1.72.1"
@@ -50,11 +57,84 @@ lazy val dockerTagOverride = settingKey[Option[String]](
   """Override for the docker image tag."""
 )
 
-lazy val root = (project in file("."))
-  .aggregate(api.projectRefs ++ Seq(frontend, backend).map(_.project): _*)
-  .settings(
-    addCommandAlias("ci", "mergifyCheck;test")
+// Node is needed by the build job: the docker image bundles the vite-built
+// frontend assets, which `scripts/build-image.sh` produces before packaging.
+ThisBuild / githubWorkflowJavaVersions := Seq(JavaSpec.temurin("17"))
+ThisBuild / githubWorkflowBuildPreamble += WorkflowStep.Use(
+  UseRef.Public("actions", "setup-node", "v5"),
+  params = Map("node-version" -> "22"),
+  name = Some("Setup Node")
+)
+
+// Build the image on every CI run so packaging breakage surfaces on PRs, where
+// it's still cheap to fix. Publishing is left to the deploy job.
+ThisBuild / githubWorkflowBuild += WorkflowStep.Run(
+  List("./scripts/build-image.sh"),
+  name = Some("Build docker image"),
+  env = Map("PUBLISH_OFFICIAL" -> "false")
+)
+
+// Deploy to fly.io from main only. sbt-typelevel's own publish job is disabled
+// (tlCiReleaseBranches/Tags above), so this replaces it rather than racing it.
+ThisBuild / githubWorkflowAddedJobs += WorkflowJob(
+  id = "deploy",
+  name = "Deploy app",
+  cond = Some("github.ref == 'refs/heads/main' && github.event_name == 'push'"),
+  needs = List("build"),
+  oses = List("ubuntu-22.04"),
+  scalas = Nil,
+  // Must match the java the generated Setup-Java step guards on: that step
+  // renders `if: matrix.java == 'temurin@17'`, which is never true without a
+  // java axis on this job's matrix.
+  javas = List(JavaSpec.temurin("17")),
+  environment = Some(
+    org.typelevel.sbt.gha.JobEnvironment(
+      "production",
+      Some(url("https://smithy4s-codegen-ui.fly.dev/"))
+    )
+  ),
+  steps = List(
+    WorkflowStep.CheckoutFull,
+    WorkflowStep.SetupSbt
+  ) ::: WorkflowStep.SetupJava(List(JavaSpec.temurin("17"))) ::: List(
+    WorkflowStep.Use(
+      UseRef.Public("actions", "setup-node", "v5"),
+      params = Map("node-version" -> "22"),
+      name = Some("Setup Node")
+    ),
+    WorkflowStep.Use(
+      UseRef.Public("docker", "login-action", "v3"),
+      params = Map(
+        "username" -> "kubukoz",
+        "password" -> "${{ secrets.DOCKERHUB_TOKEN }}"
+      ),
+      name = Some("Login to Docker Hub")
+    ),
+    WorkflowStep.Use(
+      UseRef.Public("superfly", "flyctl-actions/setup-flyctl", "master"),
+      name = Some("Setup flyctl")
+    ),
+    WorkflowStep.Run(
+      List("flyctl auth docker"),
+      name = Some("Authenticate docker with fly"),
+      env = Map("FLY_API_TOKEN" -> "${{ secrets.FLY_TOKEN }}")
+    ),
+    WorkflowStep.Run(
+      List("./scripts/build-image.sh"),
+      name = Some("Build and publish docker image"),
+      env = Map("PUBLISH_OFFICIAL" -> "true")
+    ),
+    WorkflowStep.Run(
+      List("flyctl deploy --remote-only"),
+      name = Some("Deploy"),
+      env = Map("FLY_API_TOKEN" -> "${{ secrets.FLY_TOKEN }}")
+    )
   )
+)
+
+lazy val root = (project in file("."))
+  .enablePlugins(NoPublishPlugin)
+  .aggregate(api.projectRefs ++ Seq(frontend, backend).map(_.project): _*)
 
 lazy val api = (projectMatrix in file("modules/api"))
   .enablePlugins(Smithy4sCodegenPlugin)
