@@ -1,8 +1,6 @@
 package smithy4s_codegen
 
 import cats.effect._
-import cats.effect.std.Env
-import cats.effect.syntax.resource._
 import cats.implicits._
 import com.comcast.ip4s._
 import org.http4s._
@@ -13,9 +11,6 @@ import smithy4s_codegen.api._
 import smithy4s_codegen.generation._
 import smithy4s_codegen.smithy._
 
-import java.io.File
-import java.nio.file.Files
-import java.nio.file.Paths
 import scala.concurrent.duration._
 
 class SmithyCodeGenerationServiceImpl(

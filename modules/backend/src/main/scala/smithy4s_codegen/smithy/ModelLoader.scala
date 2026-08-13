@@ -11,7 +11,6 @@ import software.amazon.smithy.model.loader.ModelDiscovery
 import software.amazon.smithy.model.loader.ModelManifestException
 import software.amazon.smithy.model.validation.ValidationEvent
 
-import java.io.File
 import java.nio.file.FileSystems
 import java.nio.file.Files
 import scala.jdk.CollectionConverters._
