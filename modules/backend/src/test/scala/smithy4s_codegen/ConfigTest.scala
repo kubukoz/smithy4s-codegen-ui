@@ -1,7 +1,6 @@
 package smithy4s_codegen
 
 import cats.effect.IO
-import fs2.io.file.{Files, Path => FPath}
 import io.circe.parser
 import weaver._
 

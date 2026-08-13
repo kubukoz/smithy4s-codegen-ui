@@ -11,7 +11,7 @@ class CodeViewer() {
       case Smithy4sConversionResult.Success(content) => content.toList
     }
     val fileAndContent: Signal[List[HtmlElement]] =
-      success.split(_._1)(render)
+      success.split(_._1)((_, _, signal) => render(signal))
 
     val icon = ResultIcon(content.map {
       case Smithy4sConversionResult.Loading    => ResultIcon.State.Loading
@@ -28,8 +28,6 @@ class CodeViewer() {
   }
 
   private def render(
-      path: Path,
-      initial: (Path, Content),
       signal: Signal[(Path, Content)]
   ): HtmlElement =
     div(

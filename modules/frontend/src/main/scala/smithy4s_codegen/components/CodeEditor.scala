@@ -4,7 +4,6 @@ import com.raquo.laminar.api.L._
 import smithy4s_codegen.api.Content
 import smithy4s_codegen.api.Path
 import smithy4s_codegen.bindings.lzstring
-import smithy4s_codegen.api.Dependencies
 import smithy4s_codegen.api.Dependency
 import smithy4s_codegen.api.GetConfigurationOutput
 

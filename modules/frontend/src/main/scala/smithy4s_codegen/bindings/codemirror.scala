@@ -23,7 +23,7 @@ trait CMText extends js.Object {
 // @codemirror/view
 @JSImport("@codemirror/view", "EditorView")
 @js.native
-class EditorView(config: js.Object) extends js.Object {
+class EditorView(@annotation.unused config: js.Object) extends js.Object {
   def state: CMEditorState = js.native
   def dispatch(tr: js.Object): Unit = js.native
   def destroy(): Unit = js.native
