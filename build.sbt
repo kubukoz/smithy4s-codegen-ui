@@ -22,10 +22,85 @@ ThisBuild / tlCiDocCheck := false
 ThisBuild / tlCiReleaseBranches := Seq()
 ThisBuild / tlCiReleaseTags := false
 
+// Shared by the missinglink CI job and the mergify condition that gates on it.
+val missinglinkOs = "ubuntu-22.04"
+val missinglinkJava = JavaSpec.temurin("17")
+
 ThisBuild / mergifyStewardConfig ~= (_.map(_.withMergeMinors(true)))
-// No explicit mergifySuccessConditions: the default derives them from the
-// generated CI matrix, so the required checks track the workflow automatically
-// (the old hardcoded "Build and Test" no longer matches any job name).
+// The default conditions derive from the generated CI matrix, so the required
+// checks track the workflow automatically -- but only for the build job, not
+// for jobs added via githubWorkflowAddedJobs. Append missinglink explicitly: a
+// dependency bump is exactly how a runtime linkage break gets in (see the
+// jsoniter-scala-core fallout from the 0.19.9 bump), and that's invisible to
+// compile+test, so steward shouldn't auto-merge without it.
+//
+// The name must be the *check* name, which GitHub suffixes with the job's
+// matrix ("Missinglink (ubuntu-22.04, temurin@17)"), not the bare job name --
+// a bare "status-success=Missinglink" matches nothing and blocks the merge
+// forever. Built from the same values as the job below so the two can't drift.
+ThisBuild / mergifySuccessConditions += MergifyCondition.Custom(
+  s"status-success=Missinglink ($missinglinkOs, ${missinglinkJava.render})"
+)
+
+// sbt-missinglink checks that everything we call actually exists in the jars we
+// resolve at runtime -- the class of bug that only shows up as a
+// NoClassDefFoundError/NoSuchMethodError on the first request that hits the
+// affected code path.
+//
+// It reads JVM bytecode, so it's only meaningful on JVM projects. On Scala.js
+// ones its "classpath" is the sjs artifacts, where scala-java-time and
+// scala-java-locales are *reimplementations* of java.time/java.util: missinglink
+// compares them against each other rather than against the JDK and reports
+// java.time.ZoneOffset.UTC and friends as missing fields. All noise, so the
+// check is off there.
+lazy val missinglinkSettings = Def.settings(
+  missinglinkIgnoreDestinationPackages ++= List(
+    // fs2-io's optional unix-socket support via jnr, which we don't ship.
+    IgnoredPackage("jnr.unixsocket"),
+    // smithy4s-core ships a near-empty `alloy.openapi` package object that
+    // shadows the real one in alloy-openapi; smithy4s-core comes first on our
+    // classpath, so every alloy.openapi method looks absent. This is a known
+    // upstream bug, not a false positive:
+    // https://github.com/disneystreaming/smithy4s/issues/1860
+    //
+    // It's harmless for us: it only breaks
+    // CodegenImpl.generate(CodegenArgs), the CLI entry point that renders
+    // OpenAPI. We go through the generate(Model, List[String]) overload (see
+    // CodegenTrick), which never touches alloy-openapi -- verified by running
+    // codegen end to end. If we ever call the CodegenArgs overload, the fix is
+    // the upstream workaround: put alloy-openapi first on the classpath.
+    IgnoredPackage("alloy.openapi")
+  )
+)
+
+lazy val noMissinglink = Def.settings(
+  missinglinkCheck := {}
+)
+
+// Its own job so it runs in parallel with the main build: it needs a full
+// compile, so it's too slow to bolt onto the critical path, and it doesn't
+// depend on anything the build job produces.
+ThisBuild / githubWorkflowAddedJobs += WorkflowJob(
+  id = "missinglink",
+  name = "Missinglink",
+  oses = List(missinglinkOs),
+  scalas = Nil,
+  // Must match the java the generated Setup-Java step guards on: that step
+  // renders `if: matrix.java == 'temurin@17'`, which is never true without a
+  // java axis on this job's matrix.
+  javas = List(missinglinkJava),
+  steps = List(
+    WorkflowStep.CheckoutFull,
+    WorkflowStep.SetupSbt
+  ) ::: WorkflowStep.SetupJava(List(missinglinkJava)) ::: List(
+    // A plain Run, not WorkflowStep.Sbt: with `scalas = Nil` the latter renders
+    // `sbt '++ ${{ matrix.scala }}'` with an empty version.
+    WorkflowStep.Run(
+      List("sbt missinglinkCheck"),
+      name = Some("Check for missing runtime links")
+    )
+  )
+)
 
 val http4sVersion = "0.23.36"
 val smithyVersion = "1.72.1"
@@ -143,12 +218,13 @@ lazy val api = (projectMatrix in file("modules/api"))
       "com.disneystreaming.smithy4s" %%% "smithy4s-core" % smithy4sVersion.value
     )
   )
-  .jvmPlatform(Seq(scala3))
-  .jsPlatform(Seq(scala3))
+  .jvmPlatform(Seq(scala3), missinglinkSettings)
+  .jsPlatform(Seq(scala3), noMissinglink)
 
 lazy val frontend = (project in file("modules/frontend"))
   .enablePlugins(ScalaJSPlugin, BuildInfoPlugin)
   .dependsOn(api.js(scala3))
+  .settings(noMissinglink)
   .settings(
     name := "smithy4s-code-generation-frontend",
     cleanFiles ++= {
@@ -271,6 +347,7 @@ lazy val backend = (project in file("modules/backend"))
     DockerPlugin
   )
   .settings(smithyClasspathSettings)
+  .settings(missinglinkSettings)
   .settings(
     name := "smithy4s-code-generation-backend",
     fork := true,
