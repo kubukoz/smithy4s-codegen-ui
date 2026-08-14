@@ -80,7 +80,10 @@ ThisBuild / githubWorkflowAddedJobs += WorkflowJob(
   id = "deploy",
   name = "Deploy app",
   cond = Some("github.ref == 'refs/heads/main' && github.event_name == 'push'"),
-  needs = List("build"),
+  // Run concurrently with the build job rather than after it (the default
+  // `needs` is List("build")). The changes were already tested on the PR, so
+  // gating on a second full test run only delays the deploy.
+  needs = Nil,
   oses = List("ubuntu-22.04"),
   scalas = Nil,
   // Must match the java the generated Setup-Java step guards on: that step
