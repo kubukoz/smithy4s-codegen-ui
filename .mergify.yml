@@ -13,6 +13,7 @@ pull_request_rules:
     - body~=labels:.*early-semver-patch
     - body~=labels:.*early-semver-minor
   - status-success=Test (ubuntu-22.04, 3, temurin@17)
+  - status-success=Missinglink (ubuntu-22.04, temurin@17)
   actions:
     merge: {}
 - name: Label api3 PRs
