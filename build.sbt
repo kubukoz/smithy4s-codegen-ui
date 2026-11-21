@@ -103,7 +103,7 @@ ThisBuild / githubWorkflowAddedJobs += WorkflowJob(
 )
 
 val http4sVersion = "0.23.38"
-val smithyVersion = "1.74.1"
+val smithyVersion = "1.75.0"
 val circeVersion = "0.14.17"
 val cirisVersion = "3.15.2"
 
